@@ -66,7 +66,7 @@ describe("collateral-vault", () => {
     // Call initialize_vault
     await program.methods
       .initializeVault()
-      .accounts({
+      .accountsPartial({
         user: user.publicKey,
         vault: vaultPda,
         vaultTokenAccount: expectedVaultAta,
@@ -97,7 +97,7 @@ describe("collateral-vault", () => {
     try {
       await program.methods
         .initializeVault()
-        .accounts({
+        .accountsPartial({
           user: user.publicKey,
           vault: vaultPda,
           vaultTokenAccount: expectedVaultAta,
@@ -107,6 +107,240 @@ describe("collateral-vault", () => {
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           rent: web3.SYSVAR_RENT_PUBKEY,
         })
+        .rpc();
+    } catch (e) {
+      threw = true;
+    }
+    expect(threw).to.eq(true);
+  });
+
+  it("deposit transfers tokens and updates vault state", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    // Fresh user to isolate state
+    const depositor = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(depositor.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    // Create a USDT mint (6 decimals), mint authority = provider wallet for convenience
+    const usdtMint = await createMint(
+      connection,
+      user.payer,
+      user.publicKey,
+      null,
+      6
+    );
+
+    // Create depositor ATA and mint some tokens to them
+    const depositorAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      user.payer,
+      usdtMint,
+      depositor.publicKey
+    );
+    await mintTo(
+      connection,
+      user.payer,
+      usdtMint,
+      depositorAta.address,
+      user.publicKey,
+      1_000_000n // 1.0 USDT (6 decimals)
+    );
+
+    // Compute expected Vault PDA and ATA
+    const [vaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), depositor.publicKey.toBuffer()],
+      program.programId
+    );
+    const vaultAta = await getAssociatedTokenAddress(usdtMint, vaultPda, true);
+
+    // Initialize vault for depositor
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: depositor.publicKey,
+        vault: vaultPda,
+        vaultTokenAccount: vaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([depositor])
+      .rpc();
+
+    // Deposit 0.3 USDT
+    const amount = new BN(300_000); // 0.3 with 6 decimals
+    await program.methods
+      .deposit(amount)
+      .accountsPartial({
+        user: depositor.publicKey,
+        vault: vaultPda,
+        userTokenAccount: depositorAta.address,
+        vaultTokenAccount: vaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([depositor])
+      .rpc();
+
+    // Check on-chain SPL balances
+    const depositorAtaInfo = await getAccount(connection, depositorAta.address);
+    const vaultAtaInfo = await getAccount(connection, vaultAta);
+    expect(Number(depositorAtaInfo.amount)).to.eq(700_000);
+    expect(Number(vaultAtaInfo.amount)).to.eq(300_000);
+
+    // Check vault state
+    const vaultAcc = await program.account.collateralVault.fetch(vaultPda);
+    expect(vaultAcc.owner.toBase58()).to.eq(depositor.publicKey.toBase58());
+    expect(new BN(vaultAcc.totalBalance).toNumber()).to.eq(300_000);
+    expect(new BN(vaultAcc.availableBalance).toNumber()).to.eq(300_000);
+    expect(new BN(vaultAcc.totalDeposited).toNumber()).to.eq(300_000);
+  });
+
+  it("deposit amount == 0 fails with InvalidAmount", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    const depositor = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(depositor.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      user.payer,
+      user.publicKey,
+      null,
+      6
+    );
+
+    const depositorAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      user.payer,
+      usdtMint,
+      depositor.publicKey
+    );
+    await mintTo(
+      connection,
+      user.payer,
+      usdtMint,
+      depositorAta.address,
+      user.publicKey,
+      500_000n
+    );
+
+    const [vaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), depositor.publicKey.toBuffer()],
+      program.programId
+    );
+    const vaultAta = await getAssociatedTokenAddress(usdtMint, vaultPda, true);
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: depositor.publicKey,
+        vault: vaultPda,
+        vaultTokenAccount: vaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([depositor])
+      .rpc();
+
+    let threw = false;
+    try {
+      await program.methods
+        .deposit(new BN(0))
+        .accountsPartial({
+          user: depositor.publicKey,
+          vault: vaultPda,
+          userTokenAccount: depositorAta.address,
+          vaultTokenAccount: vaultAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([depositor])
+        .rpc();
+    } catch (e) {
+      threw = true;
+    }
+    expect(threw).to.eq(true);
+  });
+
+  it("deposit fails when user has insufficient funds", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    const depositor = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(depositor.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      user.payer,
+      user.publicKey,
+      null,
+      6
+    );
+
+    const depositorAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      user.payer,
+      usdtMint,
+      depositor.publicKey
+    );
+    // Mint less than we will try to deposit
+    await mintTo(
+      connection,
+      user.payer,
+      usdtMint,
+      depositorAta.address,
+      user.publicKey,
+      100_000n // 0.1 USDT
+    );
+
+    const [vaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), depositor.publicKey.toBuffer()],
+      program.programId
+    );
+    const vaultAta = await getAssociatedTokenAddress(usdtMint, vaultPda, true);
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: depositor.publicKey,
+        vault: vaultPda,
+        vaultTokenAccount: vaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([depositor])
+      .rpc();
+
+    let threw = false;
+    try {
+      await program.methods
+        .deposit(new BN(200_000)) // 0.2 USDT > 0.1 balance
+        .accountsPartial({
+          user: depositor.publicKey,
+          vault: vaultPda,
+          userTokenAccount: depositorAta.address,
+          vaultTokenAccount: vaultAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([depositor])
         .rpc();
     } catch (e) {
       threw = true;
