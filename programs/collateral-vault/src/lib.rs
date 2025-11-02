@@ -83,7 +83,7 @@ pub struct InitializeVault<'info> {
     pub vault: Account<'info, CollateralVault>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         associated_token::mint = usdt_mint,
         associated_token::authority = vault,
