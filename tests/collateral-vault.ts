@@ -620,4 +620,133 @@ describe("collateral-vault", () => {
     }
     expect(threw).to.eq(true);
   });
+
+  it("initialize_vault_authority sets governance, programs, and freeze", async () => {
+    const user = provider.wallet as anchor.Wallet;
+
+    const initialPrograms = [
+      web3.Keypair.generate().publicKey,
+      web3.Keypair.generate().publicKey,
+    ];
+
+    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_authority")],
+      program.programId
+    );
+
+    await program.methods
+      .initializeVaultAuthority(initialPrograms, false)
+      .accountsPartial({
+        governance: user.publicKey,
+        vaultAuthority: vaultAuthorityPda,
+        systemProgram: web3.SystemProgram.programId,
+      })
+      .rpc();
+
+    const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+    expect(va.governance.toBase58()).to.eq(user.publicKey.toBase58());
+    expect(va.authorizedPrograms.length).to.eq(initialPrograms.length);
+    expect(va.freeze).to.eq(false);
+  });
+
+  it("only governance can update vault authority and add/remove works", async () => {
+    const user = provider.wallet as anchor.Wallet;
+
+    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_authority")],
+      program.programId
+    );
+
+    // Add a new program
+    const newProgram = web3.Keypair.generate().publicKey;
+    await (program as any).methods
+      .addAuthorizedProgram(newProgram)
+      .accountsPartial({
+        governance: user.publicKey,
+        vaultAuthority: vaultAuthorityPda,
+      })
+      .rpc();
+
+    let va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+    expect(va.authorizedPrograms.map((p: web3.PublicKey) => p.toBase58())).to.include(
+      newProgram.toBase58()
+    );
+
+    // Duplicate add should throw
+    let dupThrew = false;
+    try {
+      await (program as any).methods
+        .addAuthorizedProgram(newProgram)
+        .accountsPartial({
+          governance: user.publicKey,
+          vaultAuthority: vaultAuthorityPda,
+        })
+        .rpc();
+    } catch (e) {
+      dupThrew = true;
+    }
+    expect(dupThrew).to.eq(true);
+
+    // Remove an existing program
+    const toRemove = va.authorizedPrograms[0] as web3.PublicKey;
+    await (program as any).methods
+      .removeAuthorizedProgram(toRemove)
+      .accountsPartial({
+        governance: user.publicKey,
+        vaultAuthority: vaultAuthorityPda,
+      })
+      .rpc();
+
+    va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+    expect(va.authorizedPrograms.map((p: web3.PublicKey) => p.toBase58())).to.not.include(
+      toRemove.toBase58()
+    );
+
+    // Non-governance signer cannot update
+    const attacker = web3.Keypair.generate();
+    let unauthorizedThrew = false;
+    try {
+      await (program as any).methods
+        .addAuthorizedProgram(web3.Keypair.generate().publicKey)
+        .accountsPartial({
+          governance: attacker.publicKey,
+          vaultAuthority: vaultAuthorityPda,
+        })
+        .signers([attacker])
+        .rpc();
+    } catch (e) {
+      unauthorizedThrew = true;
+    }
+    expect(unauthorizedThrew).to.eq(true);
+  });
+
+  it("set_freeze_flag toggles freeze on vault authority", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_authority")],
+      program.programId
+    );
+
+    await (program as any).methods
+      .setFreezeFlag(true)
+      .accountsPartial({
+        governance: user.publicKey,
+        vaultAuthority: vaultAuthorityPda,
+      })
+      .rpc();
+
+    let va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+    expect(va.freeze).to.eq(true);
+
+    await (program as any).methods
+      .setFreezeFlag(false)
+      .accountsPartial({
+        governance: user.publicKey,
+        vaultAuthority: vaultAuthorityPda,
+      })
+      .rpc();
+
+    va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+    expect(va.freeze).to.eq(false);
+  });
 });

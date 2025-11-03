@@ -41,6 +41,44 @@ pub mod collateral_vault {
         Ok(())
     }
 
+    // Add a program to the authorized list. Only governance can update.
+    pub fn add_authorized_program(
+        ctx: Context<UpdateVaultAuthority>,
+        program: Pubkey,
+    ) -> Result<()> {
+        let va = &mut ctx.accounts.vault_authority;
+        // Prevent duplicates
+        require!(!va.authorized_programs.iter().any(|p| *p == program), ErrorCode::AlreadyExists);
+        // Enforce capacity bound
+        require!(va.authorized_programs.len() < MAX_AUTHORIZED_PROGRAMS, ErrorCode::Overflow);
+        va.authorized_programs.push(program);
+        Ok(())
+    }
+
+    // Remove a program from the authorized list. Only governance can update.
+    pub fn remove_authorized_program(
+        ctx: Context<UpdateVaultAuthority>,
+        program: Pubkey,
+    ) -> Result<()> {
+        let va = &mut ctx.accounts.vault_authority;
+        if let Some(index) = va.authorized_programs.iter().position(|p| *p == program) {
+            va.authorized_programs.swap_remove(index);
+            Ok(())
+        } else {
+            err!(ErrorCode::NotFound)
+        }
+    }
+
+    // Optionally freeze/unfreeze all vault operations globally. Only governance can update.
+    pub fn set_freeze_flag(
+        ctx: Context<UpdateVaultAuthority>,
+        freeze: bool,
+    ) -> Result<()> {
+        let va = &mut ctx.accounts.vault_authority;
+        va.freeze = freeze;
+        Ok(())
+    }
+
     // Step 2 — initialize_vault
     // Creates the Vault PDA and the vault's ATA for the provided USDT mint.
     pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
@@ -266,6 +304,21 @@ pub struct InitializeVaultAuthority<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct UpdateVaultAuthority<'info> {
+    // Governance signer must match the one recorded on the authority account
+    #[account(mut)]
+    pub governance: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [VAULT_AUTHORITY_SEED],
+        bump = vault_authority.bump,
+        has_one = governance @ ErrorCode::Unauthorized,
+    )]
+    pub vault_authority: Account<'info, VaultAuthority>,
+}
+
 // ----------------------------
 // Accounts
 // ----------------------------
@@ -405,6 +458,8 @@ pub enum ErrorCode {
     UnauthorizedProgram,
     #[msg("Account already initialized")] 
     AlreadyInitialized,
+    #[msg("Entry already exists")] 
+    AlreadyExists,
     #[msg("Account not found")] 
     NotFound,
 }
