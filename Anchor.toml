@@ -19,4 +19,4 @@ wallet = "~/.config/solana/id.json"
 test = "anchor test"
 
 [test]
-startup_wait = 20000
+startup_wait = 80000
