@@ -2,6 +2,10 @@ use anchor_lang::prelude::*;
 
 use crate::constants::{MAX_AUTHORIZED_PROGRAMS, VAULT_AUTHORITY_SEED};
 use crate::error::ErrorCode;
+use crate::events::{
+    AuthorizedProgramAddedEvent, AuthorizedProgramRemovedEvent, CpiEnforcedSetEvent,
+    FreezeFlagSetEvent, VaultAuthorityInitializedEvent,
+};
 use crate::state::VaultAuthority;
 
 pub fn initialize_vault_authority(
@@ -20,6 +24,12 @@ pub fn initialize_vault_authority(
     va.authorized_programs = authorized_programs;
     va.bump = ctx.bumps.vault_authority;
     va.freeze = freeze.unwrap_or(false);
+    va.cpi_enforced = false;
+    emit!(VaultAuthorityInitializedEvent {
+        governance: va.governance,
+        authorized_programs_len: va.authorized_programs.len() as u32,
+        freeze: va.freeze,
+    });
     Ok(())
 }
 
@@ -33,6 +43,7 @@ pub fn add_authorized_program(
     // Enforce capacity bound
     require!(va.authorized_programs.len() < MAX_AUTHORIZED_PROGRAMS, ErrorCode::Overflow);
     va.authorized_programs.push(program);
+    emit!(AuthorizedProgramAddedEvent { program });
     Ok(())
 }
 
@@ -43,6 +54,7 @@ pub fn remove_authorized_program(
     let va = &mut ctx.accounts.vault_authority;
     if let Some(index) = va.authorized_programs.iter().position(|p| *p == program) {
         va.authorized_programs.swap_remove(index);
+        emit!(AuthorizedProgramRemovedEvent { program });
         Ok(())
     } else {
         err!(ErrorCode::NotFound)
@@ -55,6 +67,17 @@ pub fn set_freeze_flag(
 ) -> Result<()> {
     let va = &mut ctx.accounts.vault_authority;
     va.freeze = freeze;
+    emit!(FreezeFlagSetEvent { freeze });
+    Ok(())
+}
+
+pub fn set_cpi_enforced(
+    ctx: Context<UpdateVaultAuthority>,
+    cpi_enforced: bool,
+) -> Result<()> {
+    let va = &mut ctx.accounts.vault_authority;
+    va.cpi_enforced = cpi_enforced;
+    emit!(CpiEnforcedSetEvent { cpi_enforced });
     Ok(())
 }
 

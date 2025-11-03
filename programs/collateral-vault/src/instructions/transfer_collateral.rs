@@ -3,8 +3,10 @@ use anchor_spl::token::{Token, TokenAccount};
 
 use crate::constants::{VAULT_AUTHORITY_SEED, VAULT_SEED};
 use crate::error::ErrorCode;
-use crate::events::TransferEvent;
+use crate::events::{TransactionEvent, TransferEvent};
+use crate::types::TransactionType;
 use crate::state::{CollateralVault, VaultAuthority};
+use anchor_lang::solana_program::sysvar::instructions as sysvar_instructions;
 
 pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 	require!(amount > 0, ErrorCode::InvalidAmount);
@@ -13,12 +15,20 @@ pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 	// Optional global freeze
 	require!(!va.freeze, ErrorCode::Frozen);
 
-	// Authorization: caller program must be in the allowlist
-	let caller = ctx.accounts.caller_program.key();
-	require!(
-		va.authorized_programs.iter().any(|p| *p == caller),
-		ErrorCode::UnauthorizedProgram
-	);
+    // Authorization: caller program must be in the allowlist
+    let caller = ctx.accounts.caller_program.key();
+    require!(
+        va.authorized_programs.iter().any(|p| *p == caller),
+        ErrorCode::UnauthorizedProgram
+    );
+    // Optional CPI-origin enforcement
+    if va.cpi_enforced {
+        let ix_ai = ctx.accounts.instructions.to_account_info();
+        let idx = sysvar_instructions::load_current_index_checked(&ix_ai)?;
+        require!(idx > 0, ErrorCode::UnauthorizedProgram);
+        let prev = sysvar_instructions::load_instruction_at_checked((idx - 1) as usize, &ix_ai)?;
+        require_keys_eq!(prev.program_id, caller, ErrorCode::UnauthorizedProgram);
+    }
 
 	let from_vault = &mut ctx.accounts.from_vault;
 	let to_vault = &mut ctx.accounts.to_vault;
@@ -46,7 +56,19 @@ pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 		ErrorCode::Unauthorized
 	);
 
-	// Balance check
+	// Explicitly assert token accounts are owned by the token program
+	require_keys_eq!(
+		ctx.accounts.from_vault_token_account.to_account_info().owner,
+		ctx.accounts.token_program.key(),
+		ErrorCode::InvalidTokenProgramOwner
+	);
+	require_keys_eq!(
+		ctx.accounts.to_vault_token_account.to_account_info().owner,
+		ctx.accounts.token_program.key(),
+		ErrorCode::InvalidTokenProgramOwner
+	);
+
+    // Balance check
 	require!(from_vault.available_balance >= amount, ErrorCode::InsufficientFunds);
 
 	// Seeds for PDA signer: ["vault", from_vault.owner]
@@ -55,7 +77,7 @@ pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 	let signer_seeds: &[&[u8]] = &[VAULT_SEED, from_owner.as_ref(), &[from_bump]];
 	let signer: &[&[&[u8]]] = &[signer_seeds];
 
-	// CPI: transfer from from_vault ATA to to_vault ATA, signed by from_vault PDA
+    // CPI: transfer from from_vault ATA to to_vault ATA, signed by from_vault PDA
 	let cpi_accounts = anchor_spl::token::Transfer {
 		from: ctx.accounts.from_vault_token_account.to_account_info(),
 		to: ctx.accounts.to_vault_token_account.to_account_info(),
@@ -66,7 +88,7 @@ pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 		cpi_accounts,
 		signer,
 	);
-	anchor_spl::token::transfer(cpi_ctx, amount)?;
+    anchor_spl::token::transfer(cpi_ctx, amount)?;
 
 	// Update balances with checked arithmetic
 	from_vault.total_balance = from_vault
@@ -112,6 +134,22 @@ pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 		to_new_total_balance: to_vault.total_balance,
 	});
 
+    // Log per-vault transaction records for both sides
+    emit!(TransactionEvent {
+        vault: from_vault.key(),
+        owner: from_vault.owner,
+        transaction_type: TransactionType::Transfer,
+        amount,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    emit!(TransactionEvent {
+        vault: to_vault.key(),
+        owner: to_vault.owner,
+        transaction_type: TransactionType::Transfer,
+        amount,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
 	Ok(())
 }
 
@@ -125,6 +163,9 @@ pub struct TransferCollateral<'info> {
 		bump = vault_authority.bump,
 	)]
 	pub vault_authority: Account<'info, VaultAuthority>,
+
+    /// System Instructions sysvar for CPI-origin verification when enforced
+    pub instructions: Sysvar<'info, Instructions>,
 
 	#[account(mut)]
 	pub from_vault: Account<'info, CollateralVault>,

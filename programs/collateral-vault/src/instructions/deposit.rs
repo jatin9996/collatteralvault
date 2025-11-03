@@ -1,13 +1,14 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount};
 
-use crate::constants::VAULT_SEED;
+use crate::constants::{MIN_DEPOSIT, VAULT_SEED};
 use crate::error::ErrorCode;
-use crate::events::DepositEvent;
+use crate::events::{DepositEvent, TransactionEvent};
+use crate::types::TransactionType;
 use crate::state::CollateralVault;
 
 pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-    require!(amount > 0, ErrorCode::InvalidAmount);
+    require!(amount >= MIN_DEPOSIT, ErrorCode::InvalidAmount);
 
     let vault = &mut ctx.accounts.vault;
     let user_token_account = &ctx.accounts.user_token_account;
@@ -18,6 +19,18 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require_keys_eq!(user_token_account.mint, vault.usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.mint, vault.usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.owner, vault.key(), ErrorCode::Unauthorized);
+
+    // Explicitly assert token accounts are owned by the token program
+    require_keys_eq!(
+        ctx.accounts.user_token_account.to_account_info().owner,
+        ctx.accounts.token_program.key(),
+        ErrorCode::InvalidTokenProgramOwner
+    );
+    require_keys_eq!(
+        ctx.accounts.vault_token_account.to_account_info().owner,
+        ctx.accounts.token_program.key(),
+        ErrorCode::InvalidTokenProgramOwner
+    );
 
     // CPI: transfer tokens from user to vault ATA
     let cpi_accounts = anchor_spl::token::Transfer {
@@ -39,6 +52,14 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         amount,
         new_total_balance: vault.total_balance,
         new_available_balance: vault.available_balance,
+    });
+
+    emit!(TransactionEvent {
+        vault: vault.key(),
+        owner: vault.owner,
+        transaction_type: TransactionType::Deposit,
+        amount,
+        timestamp: Clock::get()?.unix_timestamp,
     });
 
     Ok(())

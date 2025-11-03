@@ -5,6 +5,7 @@ pub mod error;
 pub mod events;
 pub mod state;
 pub mod instructions;
+pub mod types;
 
 // Re-export account context types at crate root to satisfy Anchor macro expectations
 pub use instructions::initialize_vault::InitializeVault;
@@ -14,6 +15,9 @@ pub use instructions::lock_collateral::LockCollateral;
 pub use instructions::unlock_collateral::UnlockCollateral;
 pub use instructions::authority::{InitializeVaultAuthority, UpdateVaultAuthority};
 pub use instructions::transfer_collateral::TransferCollateral;
+pub use instructions::update_usdt_mint::UpdateUsdtMint;
+pub use instructions::close_vault::CloseVault;
+pub use instructions::get_vault_info::GetVaultInfo;
 
 
 declare_id!("Ag5PZxbajsqFrZa6N8vgfc2r8rnejKdPpGNSxn4S29q5");
@@ -68,6 +72,22 @@ pub mod collateral_vault {
 
     pub fn set_freeze_flag(ctx: Context<UpdateVaultAuthority>, freeze: bool) -> Result<()> {
         instructions::authority::set_freeze_flag(ctx, freeze)
+    }
+
+    pub fn set_cpi_enforced(ctx: Context<UpdateVaultAuthority>, cpi_enforced: bool) -> Result<()> {
+        instructions::authority::set_cpi_enforced(ctx, cpi_enforced)
+    }
+
+    pub fn update_usdt_mint(ctx: Context<UpdateUsdtMint>) -> Result<()> {
+        instructions::update_usdt_mint::handler(ctx)
+    }
+
+    pub fn close_vault(ctx: Context<CloseVault>) -> Result<()> {
+        instructions::close_vault::handler(ctx)
+    }
+
+    pub fn get_vault_info(_ctx: Context<GetVaultInfo>) -> Result<()> {
+        Ok(())
     }
 }
 

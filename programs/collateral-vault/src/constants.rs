@@ -5,4 +5,9 @@ pub const VAULT_AUTHORITY_SEED: &[u8] = b"vault_authority";
 // Sizing limits
 pub const MAX_AUTHORIZED_PROGRAMS: usize = 64; // conservative upper bound for admin list
 
+// Business rules
+// Minimum deposit amount in smallest units (token decimals apply).
+// Set to 1 to effectively mirror > 0, can be raised by code updates if required.
+pub const MIN_DEPOSIT: u64 = 1;
+
 

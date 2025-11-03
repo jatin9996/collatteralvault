@@ -22,6 +22,12 @@ pub enum ErrorCode {
     Frozen,
     #[msg("Balance invariant violated")] 
     InvariantViolation,
+    #[msg("Vault has non-zero balance")]
+    NonZeroBalance,
+    #[msg("Invalid token account program owner")]
+    InvalidTokenProgramOwner,
+    #[msg("User has open positions (locked collateral present)")]
+    OpenPositionsExist,
 }
 
 

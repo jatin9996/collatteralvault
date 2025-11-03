@@ -2,8 +2,10 @@ use anchor_lang::prelude::*;
 
 use crate::constants::VAULT_AUTHORITY_SEED;
 use crate::error::ErrorCode;
-use crate::events::UnlockEvent;
+use crate::events::{TransactionEvent, UnlockEvent};
+use crate::types::TransactionType;
 use crate::state::{CollateralVault, VaultAuthority};
+use anchor_lang::solana_program::sysvar::instructions as sysvar_instructions;
 
 pub fn handler(ctx: Context<UnlockCollateral>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
@@ -18,6 +20,14 @@ pub fn handler(ctx: Context<UnlockCollateral>, amount: u64) -> Result<()> {
         va.authorized_programs.iter().any(|p| *p == caller),
         ErrorCode::UnauthorizedProgram
     );
+    // Optional CPI-origin enforcement
+    if va.cpi_enforced {
+        let ix_ai = ctx.accounts.instructions.to_account_info();
+        let idx = sysvar_instructions::load_current_index_checked(&ix_ai)?;
+        require!(idx > 0, ErrorCode::UnauthorizedProgram);
+        let prev = sysvar_instructions::load_instruction_at_checked((idx - 1) as usize, &ix_ai)?;
+        require_keys_eq!(prev.program_id, caller, ErrorCode::UnauthorizedProgram);
+    }
 
     let vault = &mut ctx.accounts.vault;
     require!(vault.locked_balance >= amount, ErrorCode::InsufficientFunds);
@@ -49,6 +59,14 @@ pub fn handler(ctx: Context<UnlockCollateral>, amount: u64) -> Result<()> {
         new_available_balance: vault.available_balance,
     });
 
+    emit!(TransactionEvent {
+        vault: vault.key(),
+        owner: vault.owner,
+        transaction_type: TransactionType::Unlock,
+        amount,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
     Ok(())
 }
 
@@ -62,6 +80,9 @@ pub struct UnlockCollateral<'info> {
         bump = vault_authority.bump,
     )]
     pub vault_authority: Account<'info, VaultAuthority>,
+
+    /// System Instructions sysvar for CPI-origin verification when enforced
+    pub instructions: Sysvar<'info, Instructions>,
 
     #[account(mut)]
     pub vault: Account<'info, CollateralVault>,

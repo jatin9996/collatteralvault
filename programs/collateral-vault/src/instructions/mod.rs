@@ -7,4 +7,8 @@ pub mod authority;
 
 pub mod transfer_collateral;
 
+pub mod update_usdt_mint;
+pub mod close_vault;
+pub mod get_vault_info;
+
 
