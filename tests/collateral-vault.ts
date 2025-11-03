@@ -347,4 +347,277 @@ describe("collateral-vault", () => {
     }
     expect(threw).to.eq(true);
   });
+
+  it("withdraw transfers tokens and updates vault state", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    const owner = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(owner.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      user.payer,
+      user.publicKey,
+      null,
+      6
+    );
+
+    const ownerAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      user.payer,
+      usdtMint,
+      owner.publicKey
+    );
+    await mintTo(
+      connection,
+      user.payer,
+      usdtMint,
+      ownerAta.address,
+      user.publicKey,
+      1_000_000n // 1.0 USDT
+    );
+
+    const [vaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), owner.publicKey.toBuffer()],
+      program.programId
+    );
+    const vaultAta = await getAssociatedTokenAddress(usdtMint, vaultPda, true);
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        vaultTokenAccount: vaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([owner])
+      .rpc();
+
+    // Deposit 0.6, then withdraw 0.2
+    await program.methods
+      .deposit(new BN(600_000))
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        userTokenAccount: ownerAta.address,
+        vaultTokenAccount: vaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([owner])
+      .rpc();
+
+    await (program as any).methods
+      .withdraw(new BN(200_000))
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        vaultTokenAccount: vaultAta,
+        userTokenAccount: ownerAta.address,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([owner])
+      .rpc();
+
+    const ownerAtaInfo = await getAccount(connection, ownerAta.address);
+    const vaultAtaInfo = await getAccount(connection, vaultAta);
+    expect(Number(ownerAtaInfo.amount)).to.eq(600_000); // 1_000_000 - 600_000 + 200_000
+    expect(Number(vaultAtaInfo.amount)).to.eq(400_000); // 600_000 - 200_000
+
+    const vaultAcc = await program.account.collateralVault.fetch(vaultPda);
+    expect(new BN(vaultAcc.totalBalance).toNumber()).to.eq(400_000);
+    expect(new BN(vaultAcc.availableBalance).toNumber()).to.eq(400_000);
+    expect(new BN(vaultAcc.totalWithdrawn).toNumber()).to.eq(200_000);
+    expect(new BN(vaultAcc.totalDeposited).toNumber()).to.eq(600_000);
+  });
+
+  it("withdraw fails when amount exceeds available", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    const owner = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(owner.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      user.payer,
+      user.publicKey,
+      null,
+      6
+    );
+
+    const ownerAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      user.payer,
+      usdtMint,
+      owner.publicKey
+    );
+    await mintTo(
+      connection,
+      user.payer,
+      usdtMint,
+      ownerAta.address,
+      user.publicKey,
+      300_000n
+    );
+
+    const [vaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), owner.publicKey.toBuffer()],
+      program.programId
+    );
+    const vaultAta = await getAssociatedTokenAddress(usdtMint, vaultPda, true);
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        vaultTokenAccount: vaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([owner])
+      .rpc();
+
+    await program.methods
+      .deposit(new BN(200_000))
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        userTokenAccount: ownerAta.address,
+        vaultTokenAccount: vaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([owner])
+      .rpc();
+
+    let threw = false;
+    try {
+      await (program as any).methods
+        .withdraw(new BN(250_000))
+        .accountsPartial({
+          user: owner.publicKey,
+          vault: vaultPda,
+          vaultTokenAccount: vaultAta,
+          userTokenAccount: ownerAta.address,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([owner])
+        .rpc();
+    } catch (e) {
+      threw = true;
+    }
+    expect(threw).to.eq(true);
+  });
+
+  it("unauthorized user cannot withdraw from another user's vault", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    const alice = web3.Keypair.generate();
+    const bob = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(alice.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(bob.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      user.payer,
+      user.publicKey,
+      null,
+      6
+    );
+
+    const aliceAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      user.payer,
+      usdtMint,
+      alice.publicKey
+    );
+    const bobAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      user.payer,
+      usdtMint,
+      bob.publicKey
+    );
+    await mintTo(
+      connection,
+      user.payer,
+      usdtMint,
+      aliceAta.address,
+      user.publicKey,
+      500_000n
+    );
+
+    const [aliceVaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), alice.publicKey.toBuffer()],
+      program.programId
+    );
+    const aliceVaultAta = await getAssociatedTokenAddress(usdtMint, aliceVaultPda, true);
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: alice.publicKey,
+        vault: aliceVaultPda,
+        vaultTokenAccount: aliceVaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([alice])
+      .rpc();
+
+    await program.methods
+      .deposit(new BN(200_000))
+      .accountsPartial({
+        user: alice.publicKey,
+        vault: aliceVaultPda,
+        userTokenAccount: aliceAta.address,
+        vaultTokenAccount: aliceVaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([alice])
+      .rpc();
+
+    // Bob attempts to withdraw from Alice's vault
+    let threw = false;
+    try {
+      await (program as any).methods
+        .withdraw(new BN(50_000))
+        .accountsPartial({
+          user: bob.publicKey,
+          vault: aliceVaultPda,
+          vaultTokenAccount: aliceVaultAta,
+          userTokenAccount: bobAta.address,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([bob])
+        .rpc();
+    } catch (e) {
+      threw = true;
+    }
+    expect(threw).to.eq(true);
+  });
 });
