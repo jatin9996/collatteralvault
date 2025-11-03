@@ -22,12 +22,12 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
 
     // Explicitly assert token accounts are owned by the token program
     require_keys_eq!(
-        ctx.accounts.user_token_account.to_account_info().owner,
+		*ctx.accounts.user_token_account.to_account_info().owner,
         ctx.accounts.token_program.key(),
         ErrorCode::InvalidTokenProgramOwner
     );
     require_keys_eq!(
-        ctx.accounts.vault_token_account.to_account_info().owner,
+		*ctx.accounts.vault_token_account.to_account_info().owner,
         ctx.accounts.token_program.key(),
         ErrorCode::InvalidTokenProgramOwner
     );

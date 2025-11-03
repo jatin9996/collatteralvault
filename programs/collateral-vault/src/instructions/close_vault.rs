@@ -15,7 +15,8 @@ pub fn handler(ctx: Context<CloseVault>) -> Result<()> {
     require!(ctx.accounts.vault_token_account.amount == 0, ErrorCode::NonZeroBalance);
 
     // Close the vault's ATA (authority is vault PDA)
-    let signer_seeds: &[&[u8]] = &[VAULT_SEED, ctx.accounts.user.key().as_ref(), &[vault.bump]];
+    let user_key = ctx.accounts.user.key();
+    let signer_seeds: &[&[u8]] = &[VAULT_SEED, user_key.as_ref(), &[vault.bump]];
     let signer: &[&[&[u8]]] = &[signer_seeds];
 
     let cpi_accounts = CloseAccount {

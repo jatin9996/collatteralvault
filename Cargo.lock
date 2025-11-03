@@ -927,6 +927,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-position-manager"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "collateral-vault",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -81,8 +81,9 @@ pub struct UnlockCollateral<'info> {
     )]
     pub vault_authority: Account<'info, VaultAuthority>,
 
-    /// System Instructions sysvar for CPI-origin verification when enforced
-    pub instructions: Sysvar<'info, Instructions>,
+	/// CHECK: Instructions sysvar account for CPI-origin verification when enforced
+	#[account(address = anchor_lang::solana_program::sysvar::instructions::ID)]
+	pub instructions: AccountInfo<'info>,
 
     #[account(mut)]
     pub vault: Account<'info, CollateralVault>,

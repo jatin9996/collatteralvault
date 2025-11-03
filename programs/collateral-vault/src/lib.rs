@@ -7,6 +7,23 @@ pub mod state;
 pub mod instructions;
 pub mod types;
 
+// Re-export instruction modules at crate root so `#[program]` macro can
+// reference generated client helpers under `crate::<ix_mod>::__client_accounts_*`
+pub use instructions::{
+    authority,
+    close_vault,
+    deposit,
+    withdraw,
+    get_vault_info,
+    initialize_vault,
+    lock_collateral,
+    transfer_collateral,
+    unlock_collateral,
+    update_usdt_mint,
+};
+
+
+
 // Re-export account context types at crate root to satisfy Anchor macro expectations
 pub use instructions::initialize_vault::InitializeVault;
 pub use instructions::deposit::Deposit;
@@ -20,7 +37,7 @@ pub use instructions::close_vault::CloseVault;
 pub use instructions::get_vault_info::GetVaultInfo;
 
 
-declare_id!("Ag5PZxbajsqFrZa6N8vgfc2r8rnejKdPpGNSxn4S29q5");
+declare_id!("Af5t3U1fEgZQGkQ92uUANSvDRd4qNTBKTQ5tTs7n8g4q");
 
 #[program]
 pub mod collateral_vault {

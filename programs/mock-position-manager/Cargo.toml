@@ -1,0 +1,27 @@
+[package]
+name = "mock-position-manager"
+version = "0.1.0"
+description = "Test-only mock program to CPI into collateral-vault"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mock_position_manager"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.32.1" }
+anchor-spl = { version = "0.32.1" }
+collateral-vault = { path = "../collateral-vault", package = "collateral-vault", features = ["cpi"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+

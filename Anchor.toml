@@ -1,12 +1,14 @@
 [toolchain]
 package_manager = "yarn"
+anchor_version = "0.32.1"
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.localnet]
-collateral_vault = "Ag5PZxbajsqFrZa6N8vgfc2r8rnejKdPpGNSxn4S29q5"
+collateral_vault = "Af5t3U1fEgZQGkQ92uUANSvDRd4qNTBKTQ5tTs7n8g4q"
+mock_position_manager = "EMHew6227FX9PUhDGKwc8FHsEASZf5Fd4GWryuEXokT"
 
 [registry]
 url = "https://api.apr.dev"
@@ -20,3 +22,5 @@ test = "anchor test"
 
 [test]
 startup_wait = 80000
+shutdown_wait = 2000
+upgradeable = false

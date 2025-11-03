@@ -58,12 +58,12 @@ pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 
 	// Explicitly assert token accounts are owned by the token program
 	require_keys_eq!(
-		ctx.accounts.from_vault_token_account.to_account_info().owner,
+		*ctx.accounts.from_vault_token_account.to_account_info().owner,
 		ctx.accounts.token_program.key(),
 		ErrorCode::InvalidTokenProgramOwner
 	);
 	require_keys_eq!(
-		ctx.accounts.to_vault_token_account.to_account_info().owner,
+		*ctx.accounts.to_vault_token_account.to_account_info().owner,
 		ctx.accounts.token_program.key(),
 		ErrorCode::InvalidTokenProgramOwner
 	);
@@ -164,8 +164,9 @@ pub struct TransferCollateral<'info> {
 	)]
 	pub vault_authority: Account<'info, VaultAuthority>,
 
-    /// System Instructions sysvar for CPI-origin verification when enforced
-    pub instructions: Sysvar<'info, Instructions>,
+	/// CHECK: Instructions sysvar account for CPI-origin verification when enforced
+	#[account(address = anchor_lang::solana_program::sysvar::instructions::ID)]
+	pub instructions: AccountInfo<'info>,
 
 	#[account(mut)]
 	pub from_vault: Account<'info, CollateralVault>,
