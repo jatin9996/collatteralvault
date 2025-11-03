@@ -13,6 +13,7 @@ pub use instructions::withdraw::Withdraw;
 pub use instructions::lock_collateral::LockCollateral;
 pub use instructions::unlock_collateral::UnlockCollateral;
 pub use instructions::authority::{InitializeVaultAuthority, UpdateVaultAuthority};
+pub use instructions::transfer_collateral::TransferCollateral;
 
 
 declare_id!("Ag5PZxbajsqFrZa6N8vgfc2r8rnejKdPpGNSxn4S29q5");
@@ -44,6 +45,10 @@ pub mod collateral_vault {
     pub fn unlock_collateral(ctx: Context<UnlockCollateral>, amount: u64) -> Result<()> {
         instructions::unlock_collateral::handler(ctx, amount)
     }
+
+	pub fn transfer_collateral(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
+		instructions::transfer_collateral::handler(ctx, amount)
+	}
 
     pub fn initialize_vault_authority(
         ctx: Context<InitializeVaultAuthority>,

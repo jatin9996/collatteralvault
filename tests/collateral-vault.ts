@@ -978,4 +978,311 @@ describe("collateral-vault", () => {
     }
     expect(threw).to.eq(true);
   });
+
+  it("transfer_collateral moves tokens between vaults and updates both states", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    // Authorized caller program (simulated)
+    const authorizedCaller = web3.Keypair.generate().publicKey;
+
+    // Ensure VaultAuthority exists and includes authorized caller
+    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_authority")],
+      program.programId
+    );
+    try {
+      await program.methods
+        .initializeVaultAuthority([authorizedCaller], false)
+        .accountsPartial({
+          governance: user.publicKey,
+          vaultAuthority: vaultAuthorityPda,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .rpc();
+    } catch (_) {
+      const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+      const present = (va.authorizedPrograms as web3.PublicKey[]).some(
+        (p) => p.toBase58() === authorizedCaller.toBase58()
+      );
+      if (!present) {
+        await (program as any).methods
+          .addAuthorizedProgram(authorizedCaller)
+          .accountsPartial({
+            governance: user.publicKey,
+            vaultAuthority: vaultAuthorityPda,
+          })
+          .rpc();
+      }
+    }
+
+    // Create mint and two users
+    const alice = web3.Keypair.generate();
+    const bob = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(alice.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(bob.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      (user as any).payer,
+      user.publicKey,
+      null,
+      6
+    );
+
+    const aliceAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      (user as any).payer,
+      usdtMint,
+      alice.publicKey
+    );
+    await mintTo(
+      connection,
+      (user as any).payer,
+      usdtMint,
+      aliceAta.address,
+      user.publicKey,
+      1_000_000n
+    );
+
+    // Compute PDAs and ATAs for both vaults
+    const [aliceVaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), alice.publicKey.toBuffer()],
+      program.programId
+    );
+    const [bobVaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), bob.publicKey.toBuffer()],
+      program.programId
+    );
+    const aliceVaultAta = await getAssociatedTokenAddress(usdtMint, aliceVaultPda, true);
+    const bobVaultAta = await getAssociatedTokenAddress(usdtMint, bobVaultPda, true);
+
+    // Initialize both vaults
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: alice.publicKey,
+        vault: aliceVaultPda,
+        vaultTokenAccount: aliceVaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([alice])
+      .rpc();
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: bob.publicKey,
+        vault: bobVaultPda,
+        vaultTokenAccount: bobVaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([bob])
+      .rpc();
+
+    // Alice deposits 0.6 USDT
+    await program.methods
+      .deposit(new BN(600_000))
+      .accountsPartial({
+        user: alice.publicKey,
+        vault: aliceVaultPda,
+        userTokenAccount: aliceAta.address,
+        vaultTokenAccount: aliceVaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([alice])
+      .rpc();
+
+    // Transfer 0.2 from Alice's vault to Bob's vault via authorized caller
+    await (program as any).methods
+      .transferCollateral(new BN(200_000))
+      .accountsPartial({
+        callerProgram: authorizedCaller,
+        vaultAuthority: vaultAuthorityPda,
+        fromVault: aliceVaultPda,
+        toVault: bobVaultPda,
+        fromVaultTokenAccount: aliceVaultAta,
+        toVaultTokenAccount: bobVaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .rpc();
+
+    // Assert SPL balances
+    const aliceVaultAtaInfo = await getAccount(connection, aliceVaultAta);
+    const bobVaultAtaInfo = await getAccount(connection, bobVaultAta);
+    expect(Number(aliceVaultAtaInfo.amount)).to.eq(400_000);
+    expect(Number(bobVaultAtaInfo.amount)).to.eq(200_000);
+
+    // Assert vault state
+    const aliceVaultAcc = await program.account.collateralVault.fetch(aliceVaultPda);
+    const bobVaultAcc = await program.account.collateralVault.fetch(bobVaultPda);
+    expect(new BN(aliceVaultAcc.totalBalance).toNumber()).to.eq(400_000);
+    expect(new BN(aliceVaultAcc.availableBalance).toNumber()).to.eq(400_000);
+    expect(new BN(aliceVaultAcc.lockedBalance).toNumber()).to.eq(0);
+    expect(new BN(bobVaultAcc.totalBalance).toNumber()).to.eq(200_000);
+    expect(new BN(bobVaultAcc.availableBalance).toNumber()).to.eq(200_000);
+    expect(new BN(bobVaultAcc.lockedBalance).toNumber()).to.eq(0);
+  });
+
+  it("transfer_collateral fails for unauthorized caller program", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    // Rogue caller not in allowlist
+    const rogueCaller = web3.Keypair.generate().publicKey;
+
+    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_authority")],
+      program.programId
+    );
+
+    // Ensure VA exists and has empty allowed list
+    let exists = false;
+    try {
+      await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+      exists = true;
+    } catch (_) {}
+    if (!exists) {
+      await program.methods
+        .initializeVaultAuthority([], false)
+        .accountsPartial({
+          governance: user.publicKey,
+          vaultAuthority: vaultAuthorityPda,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .rpc();
+    } else {
+      const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+      for (const p of va.authorizedPrograms as web3.PublicKey[]) {
+        await (program as any).methods
+          .removeAuthorizedProgram(p)
+          .accountsPartial({
+            governance: user.publicKey,
+            vaultAuthority: vaultAuthorityPda,
+          })
+          .rpc();
+      }
+    }
+
+    // Setup minimal two vaults and mint
+    const alice = web3.Keypair.generate();
+    const bob = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(alice.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(bob.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      (user as any).payer,
+      user.publicKey,
+      null,
+      6
+    );
+    const [aliceVaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), alice.publicKey.toBuffer()],
+      program.programId
+    );
+    const [bobVaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), bob.publicKey.toBuffer()],
+      program.programId
+    );
+    const aliceVaultAta = await getAssociatedTokenAddress(usdtMint, aliceVaultPda, true);
+    const bobVaultAta = await getAssociatedTokenAddress(usdtMint, bobVaultPda, true);
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: alice.publicKey,
+        vault: aliceVaultPda,
+        vaultTokenAccount: aliceVaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([alice])
+      .rpc();
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: bob.publicKey,
+        vault: bobVaultPda,
+        vaultTokenAccount: bobVaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([bob])
+      .rpc();
+
+    // To fail fast on UnauthorizedProgram, no deposit is strictly necessary, but
+    // deposit a small amount so follow-up checks wouldn't pass otherwise.
+    const aliceAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      (user as any).payer,
+      usdtMint,
+      alice.publicKey
+    );
+    await mintTo(
+      connection,
+      (user as any).payer,
+      usdtMint,
+      aliceAta.address,
+      user.publicKey,
+      100_000n
+    );
+    await program.methods
+      .deposit(new BN(50_000))
+      .accountsPartial({
+        user: alice.publicKey,
+        vault: aliceVaultPda,
+        userTokenAccount: aliceAta.address,
+        vaultTokenAccount: aliceVaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([alice])
+      .rpc();
+
+    let threw = false;
+    try {
+      await (program as any).methods
+        .transferCollateral(new BN(10_000))
+        .accountsPartial({
+          callerProgram: rogueCaller,
+          vaultAuthority: vaultAuthorityPda,
+          fromVault: aliceVaultPda,
+          toVault: bobVaultPda,
+          fromVaultTokenAccount: aliceVaultAta,
+          toVaultTokenAccount: bobVaultAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+    } catch (e) {
+      threw = true;
+    }
+    expect(threw).to.eq(true);
+  });
 });
