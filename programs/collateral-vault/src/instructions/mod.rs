@@ -16,4 +16,6 @@ pub mod update_usdt_mint;
 pub mod close_vault;
 pub mod get_vault_info;
 
+pub mod emergency_withdraw;
+
 

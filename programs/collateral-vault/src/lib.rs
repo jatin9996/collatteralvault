@@ -16,6 +16,7 @@ pub use instructions::{
         delegation,
     multisig,
     withdraw,
+    emergency_withdraw,
     get_vault_info,
     initialize_vault,
     lock_collateral,
@@ -42,6 +43,7 @@ pub use instructions::delegation::UpdateDelegates;
 pub use instructions::update_usdt_mint::UpdateUsdtMint;
 pub use instructions::close_vault::CloseVault;
 pub use instructions::get_vault_info::GetVaultInfo;
+pub use instructions::emergency_withdraw::EmergencyWithdraw;
 
 
 declare_id!("Af5t3U1fEgZQGkQ92uUANSvDRd4qNTBKTQ5tTs7n8g4q");
@@ -64,6 +66,10 @@ pub mod collateral_vault {
 
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         instructions::withdraw::handler(ctx, amount)
+    }
+
+    pub fn emergency_withdraw(ctx: Context<EmergencyWithdraw>, amount: u64) -> Result<()> {
+        instructions::emergency_withdraw::handler(ctx, amount)
     }
 
     pub fn set_vault_multisig(ctx: Context<multisig::SetVaultMultisig>, signers: Vec<Pubkey>, threshold: u8) -> Result<()> {

@@ -56,6 +56,17 @@ pub struct TransactionEvent {
 }
 
 #[event]
+pub struct EmergencyWithdrawEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub authority: Pubkey,
+    pub amount: u64,
+    pub new_total_balance: u64,
+    pub new_available_balance: u64,
+    pub new_locked_balance: u64,
+}
+
+#[event]
 pub struct TimelockScheduledEvent {
     pub vault: Pubkey,
     pub owner: Pubkey,
