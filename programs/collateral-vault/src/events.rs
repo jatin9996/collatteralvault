@@ -56,6 +56,23 @@ pub struct TransactionEvent {
 }
 
 #[event]
+pub struct TimelockScheduledEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub amount: u64,
+    pub unlock_time: i64,
+    pub remaining_timelocks: u32,
+}
+
+#[event]
+pub struct TimelocksReleasedEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub released_total: u64,
+    pub remaining_timelocks: u32,
+}
+
+#[event]
 pub struct VaultAuthorityInitializedEvent {
     pub governance: Pubkey,
     pub authorized_programs_len: u32,

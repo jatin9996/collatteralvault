@@ -57,6 +57,30 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         require!(approved >= threshold, ErrorCode::Unauthorized);
     }
 
+    // Before applying business invariants, auto-release any matured timelocks
+    {
+        let now = Clock::get()?.unix_timestamp;
+        let vault_ref = &mut ctx.accounts.vault;
+        let mut released_total: u64 = 0;
+        let mut remaining: Vec<crate::types::TimelockEntry> = Vec::with_capacity(vault_ref.timelocks.len());
+        for e in vault_ref.timelocks.iter() {
+            if e.unlock_time <= now {
+                released_total = released_total
+                    .checked_add(e.amount)
+                    .ok_or(ErrorCode::Overflow)?;
+            } else {
+                remaining.push(*e);
+            }
+        }
+        if released_total > 0 {
+            vault_ref.available_balance = vault_ref
+                .available_balance
+                .checked_add(released_total)
+                .ok_or(ErrorCode::Overflow)?;
+        }
+        vault_ref.timelocks = remaining;
+    }
+
     // Business invariants
     require!(available_balance >= amount, ErrorCode::InsufficientFunds);
     // Enforce no-open-positions rule (no locked funds)

@@ -21,6 +21,8 @@ pub use instructions::{
     lock_collateral,
     transfer_collateral,
     unlock_collateral,
+    schedule_timelock,
+    release_timelocks,
     update_usdt_mint,
 };
 
@@ -32,6 +34,8 @@ pub use instructions::deposit::Deposit;
 pub use instructions::withdraw::Withdraw;
 pub use instructions::lock_collateral::LockCollateral;
 pub use instructions::unlock_collateral::UnlockCollateral;
+pub use instructions::schedule_timelock::ScheduleTimelock;
+pub use instructions::release_timelocks::ReleaseTimelocks;
 pub use instructions::authority::{InitializeVaultAuthority, UpdateVaultAuthority};
 pub use instructions::transfer_collateral::TransferCollateral;
 pub use instructions::delegation::UpdateDelegates;
@@ -81,6 +85,14 @@ pub mod collateral_vault {
 	pub fn transfer_collateral(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 		instructions::transfer_collateral::handler(ctx, amount)
 	}
+
+    pub fn schedule_timelock(ctx: Context<ScheduleTimelock>, amount: u64, duration_seconds: i64) -> Result<()> {
+        instructions::schedule_timelock::handler(ctx, amount, duration_seconds)
+    }
+
+    pub fn release_timelocks(ctx: Context<ReleaseTimelocks>) -> Result<()> {
+        instructions::release_timelocks::handler(ctx)
+    }
 
     pub fn initialize_vault_authority(
         ctx: Context<InitializeVaultAuthority>,
@@ -153,6 +165,10 @@ mod tests {
             total_withdrawn: 800,
             created_at: 1_700_000_000,
             bump: 254,
+            multisig_threshold: 0,
+            multisig_signers: vec![],
+            delegates: vec![],
+            timelocks: vec![],
             _reserved: [0u8; 64],
         };
 
@@ -186,6 +202,7 @@ mod tests {
             authorized_programs: programs.clone(),
             bump: 200,
             freeze: false,
+            cpi_enforced: false,
             _reserved: [0u8; 64],
         };
 

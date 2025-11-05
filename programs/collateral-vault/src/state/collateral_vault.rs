@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
-use crate::constants::{MAX_DELEGATES, MAX_MULTISIG_SIGNERS};
+use crate::constants::{MAX_DELEGATES, MAX_MULTISIG_SIGNERS, MAX_TIMELOCKS};
+use crate::types::TimelockEntry;
 
 #[account]
 #[derive(InitSpace)]
@@ -33,6 +34,10 @@ pub struct CollateralVault {
     #[max_len(MAX_DELEGATES)]
     pub delegates: Vec<Pubkey>,        // 4 + M*32
 
+    // Scheduled partial-withdraw timelocks (amount unlocks at unlock_time)
+    #[max_len(MAX_TIMELOCKS)]
+    pub timelocks: Vec<TimelockEntry>, // 4 + N*size(TimelockEntry)
+
     // Reserved for future upgrades to avoid migrations
     pub _reserved: [u8; 64],           // 64
 }
@@ -52,6 +57,7 @@ impl CollateralVault {
         + 1   // multisig_threshold
         + 4 + (MAX_MULTISIG_SIGNERS * 32) // multisig_signers vec
         + 4 + (MAX_DELEGATES * 32)        // delegates vec
+        + 4 + (MAX_TIMELOCKS * (8 + 8))   // timelocks vec (u64 + i64)
         + 64; // reserved
 }
 

@@ -17,4 +17,10 @@ pub struct TransactionRecord {
     pub timestamp: i64,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+pub struct TimelockEntry {
+    pub amount: u64,
+    pub unlock_time: i64,
+}
+
 

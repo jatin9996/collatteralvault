@@ -24,6 +24,7 @@ pub fn handler(ctx: Context<InitializeVault>) -> Result<()> {
     vault.multisig_threshold = 0; // disabled by default
     vault.multisig_signers.clear();
     vault.delegates.clear();
+    vault.timelocks.clear();
 
     Ok(())
 }
