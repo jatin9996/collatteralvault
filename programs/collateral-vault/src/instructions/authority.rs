@@ -81,6 +81,39 @@ pub fn set_cpi_enforced(
     Ok(())
 }
 
+pub fn add_yield_program(
+    ctx: Context<UpdateVaultAuthority>,
+    program: Pubkey,
+) -> Result<()> {
+    let va = &mut ctx.accounts.vault_authority;
+    require!(!va.yield_whitelist.iter().any(|p| *p == program), ErrorCode::AlreadyExists);
+    require!(va.yield_whitelist.len() < MAX_AUTHORIZED_PROGRAMS, ErrorCode::Overflow);
+    va.yield_whitelist.push(program);
+    Ok(())
+}
+
+pub fn remove_yield_program(
+    ctx: Context<UpdateVaultAuthority>,
+    program: Pubkey,
+) -> Result<()> {
+    let va = &mut ctx.accounts.vault_authority;
+    if let Some(index) = va.yield_whitelist.iter().position(|p| *p == program) {
+        va.yield_whitelist.swap_remove(index);
+        Ok(())
+    } else {
+        err!(ErrorCode::NotFound)
+    }
+}
+
+pub fn set_risk_level(
+    ctx: Context<UpdateVaultAuthority>,
+    risk_level: u8,
+) -> Result<()> {
+    let va = &mut ctx.accounts.vault_authority;
+    va.risk_level = risk_level;
+    Ok(())
+}
+
 #[derive(Accounts)]
 pub struct InitializeVaultAuthority<'info> {
     #[account(mut)]

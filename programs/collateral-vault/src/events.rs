@@ -124,3 +124,34 @@ pub struct VaultClosedEvent {
 }
 
 
+#[event]
+pub struct YieldDepositEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub program: Pubkey,
+    pub amount: u64,
+    pub new_yield_balance: u64,
+    pub new_available_balance: u64,
+}
+
+#[event]
+pub struct YieldWithdrawEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub program: Pubkey,
+    pub amount: u64,
+    pub new_yield_balance: u64,
+    pub new_available_balance: u64,
+}
+
+#[event]
+pub struct YieldCompoundEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub program: Pubkey,
+    pub compounded_amount: u64,
+    pub new_yield_balance: u64,
+    pub last_compounded_at: i64,
+}
+
+

@@ -28,6 +28,10 @@ pub enum ErrorCode {
     InvalidTokenProgramOwner,
     #[msg("User has open positions (locked collateral present)")]
     OpenPositionsExist,
+    #[msg("Yield program not whitelisted")] 
+    YieldProgramNotWhitelisted,
+    #[msg("Insufficient yield balance")] 
+    InsufficientYieldBalance,
 }
 
 

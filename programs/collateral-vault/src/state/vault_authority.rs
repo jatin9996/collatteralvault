@@ -16,6 +16,13 @@ pub struct VaultAuthority {
     // When true, lock/unlock/transfer require CPI-origin check against an allowlisted program
     pub cpi_enforced: bool, // 1
 
+    // Whitelisted yield programs allowed for CPI-based yield operations
+    #[max_len(MAX_AUTHORIZED_PROGRAMS)]
+    pub yield_whitelist: Vec<Pubkey>, // 4 + N*32
+
+    // Optional risk policy level (0=conservative ... 255=aggressive)
+    pub risk_level: u8, // 1
+
     pub _reserved: [u8; 64], // 64
 }
 
@@ -27,6 +34,9 @@ impl VaultAuthority {
         + 1                   // bump
         + 1                   // freeze
         + 1                   // cpi_enforced
+        + 4                   // yield_whitelist vec len
+        + (MAX_AUTHORIZED_PROGRAMS * 32)
+        + 1                   // risk_level
         + 64;                 // reserved
 }
 

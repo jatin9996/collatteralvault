@@ -25,6 +25,9 @@ pub use instructions::{
     schedule_timelock,
     release_timelocks,
     update_usdt_mint,
+    yield_deposit,
+    yield_withdraw,
+    compound_yield,
 };
 
 
@@ -44,6 +47,9 @@ pub use instructions::update_usdt_mint::UpdateUsdtMint;
 pub use instructions::close_vault::CloseVault;
 pub use instructions::get_vault_info::GetVaultInfo;
 pub use instructions::emergency_withdraw::EmergencyWithdraw;
+pub use instructions::yield_deposit::YieldDeposit as YieldDepositCtx;
+pub use instructions::yield_withdraw::YieldWithdraw as YieldWithdrawCtx;
+pub use instructions::compound_yield::CompoundYield as CompoundYieldCtx;
 
 
 declare_id!("Af5t3U1fEgZQGkQ92uUANSvDRd4qNTBKTQ5tTs7n8g4q");
@@ -124,6 +130,18 @@ pub mod collateral_vault {
         instructions::authority::set_cpi_enforced(ctx, cpi_enforced)
     }
 
+    pub fn add_yield_program(ctx: Context<UpdateVaultAuthority>, program: Pubkey) -> Result<()> {
+        instructions::authority::add_yield_program(ctx, program)
+    }
+
+    pub fn remove_yield_program(ctx: Context<UpdateVaultAuthority>, program: Pubkey) -> Result<()> {
+        instructions::authority::remove_yield_program(ctx, program)
+    }
+
+    pub fn set_risk_level(ctx: Context<UpdateVaultAuthority>, risk_level: u8) -> Result<()> {
+        instructions::authority::set_risk_level(ctx, risk_level)
+    }
+
     pub fn add_delegate(ctx: Context<delegation::UpdateDelegates>, delegate: Pubkey) -> Result<()> {
         instructions::delegation::add_delegate(ctx, delegate)
     }
@@ -142,6 +160,18 @@ pub mod collateral_vault {
 
     pub fn get_vault_info(_ctx: Context<GetVaultInfo>) -> Result<()> {
         Ok(())
+    }
+
+    pub fn yield_deposit(ctx: Context<yield_deposit::YieldDeposit>, amount: u64) -> Result<()> {
+        instructions::yield_deposit::handler(ctx, amount)
+    }
+
+    pub fn yield_withdraw(ctx: Context<yield_withdraw::YieldWithdraw>, amount: u64) -> Result<()> {
+        instructions::yield_withdraw::handler(ctx, amount)
+    }
+
+    pub fn compound_yield(ctx: Context<compound_yield::CompoundYield>, compounded_amount: u64) -> Result<()> {
+        instructions::compound_yield::handler(ctx, compounded_amount)
     }
 }
 
@@ -169,6 +199,10 @@ mod tests {
             available_balance: 78,
             total_deposited: 1000,
             total_withdrawn: 800,
+            yield_deposited_balance: 0,
+            yield_accrued_balance: 0,
+            last_compounded_at: 0,
+            active_yield_program: Pubkey::default(),
             created_at: 1_700_000_000,
             bump: 254,
             multisig_threshold: 0,
@@ -209,6 +243,8 @@ mod tests {
             bump: 200,
             freeze: false,
             cpi_enforced: false,
+            yield_whitelist: programs.clone(),
+            risk_level: 0,
             _reserved: [0u8; 64],
         };
 

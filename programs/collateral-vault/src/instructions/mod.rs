@@ -18,4 +18,8 @@ pub mod get_vault_info;
 
 pub mod emergency_withdraw;
 
+pub mod yield_deposit;
+pub mod yield_withdraw;
+pub mod compound_yield;
+
 

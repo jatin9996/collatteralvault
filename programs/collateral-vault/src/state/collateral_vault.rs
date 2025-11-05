@@ -21,6 +21,12 @@ pub struct CollateralVault {
     pub total_deposited: u64,          // 8
     pub total_withdrawn: u64,          // 8
 
+    // Yield strategy tracking
+    pub yield_deposited_balance: u64,  // 8 - amount placed into yield protocols
+    pub yield_accrued_balance: u64,    // 8 - unclaimed rewards accounted to the vault
+    pub last_compounded_at: i64,       // 8 - unix timestamp of last compound
+    pub active_yield_program: Pubkey,  // 32 - currently selected yield program id (0 if none)
+
     // Metadata
     pub created_at: i64,               // 8 (unix timestamp)
     pub bump: u8,                      // 1
@@ -52,6 +58,10 @@ impl CollateralVault {
         + 8   // available_balance
         + 8   // total_deposited
         + 8   // total_withdrawn
+        + 8   // yield_deposited_balance
+        + 8   // yield_accrued_balance
+        + 8   // last_compounded_at
+        + 32  // active_yield_program
         + 8   // created_at
         + 1   // bump
         + 1   // multisig_threshold

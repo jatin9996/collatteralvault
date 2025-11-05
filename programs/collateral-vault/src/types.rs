@@ -8,6 +8,9 @@ pub enum TransactionType {
     Unlock,
     Transfer,
     EmergencyWithdrawal,
+    YieldDeposit,
+    YieldWithdraw,
+    YieldCompound,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
