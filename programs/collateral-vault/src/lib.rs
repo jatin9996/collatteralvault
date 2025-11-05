@@ -13,6 +13,8 @@ pub use instructions::{
     authority,
     close_vault,
     deposit,
+        delegation,
+    multisig,
     withdraw,
     get_vault_info,
     initialize_vault,
@@ -32,6 +34,7 @@ pub use instructions::lock_collateral::LockCollateral;
 pub use instructions::unlock_collateral::UnlockCollateral;
 pub use instructions::authority::{InitializeVaultAuthority, UpdateVaultAuthority};
 pub use instructions::transfer_collateral::TransferCollateral;
+pub use instructions::delegation::UpdateDelegates;
 pub use instructions::update_usdt_mint::UpdateUsdtMint;
 pub use instructions::close_vault::CloseVault;
 pub use instructions::get_vault_info::GetVaultInfo;
@@ -57,6 +60,14 @@ pub mod collateral_vault {
 
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         instructions::withdraw::handler(ctx, amount)
+    }
+
+    pub fn set_vault_multisig(ctx: Context<multisig::SetVaultMultisig>, signers: Vec<Pubkey>, threshold: u8) -> Result<()> {
+        instructions::multisig::set_vault_multisig(ctx, signers, threshold)
+    }
+
+    pub fn disable_vault_multisig(ctx: Context<multisig::SetVaultMultisig>) -> Result<()> {
+        instructions::multisig::disable_vault_multisig(ctx)
     }
 
     pub fn lock_collateral(ctx: Context<LockCollateral>, amount: u64) -> Result<()> {
@@ -93,6 +104,14 @@ pub mod collateral_vault {
 
     pub fn set_cpi_enforced(ctx: Context<UpdateVaultAuthority>, cpi_enforced: bool) -> Result<()> {
         instructions::authority::set_cpi_enforced(ctx, cpi_enforced)
+    }
+
+    pub fn add_delegate(ctx: Context<delegation::UpdateDelegates>, delegate: Pubkey) -> Result<()> {
+        instructions::delegation::add_delegate(ctx, delegate)
+    }
+
+    pub fn remove_delegate(ctx: Context<delegation::UpdateDelegates>, delegate: Pubkey) -> Result<()> {
+        instructions::delegation::remove_delegate(ctx, delegate)
     }
 
     pub fn update_usdt_mint(ctx: Context<UpdateUsdtMint>) -> Result<()> {

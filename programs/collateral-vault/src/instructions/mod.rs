@@ -5,7 +5,10 @@ pub mod lock_collateral;
 pub mod unlock_collateral;
 pub mod authority;
 
+pub mod multisig;
 pub mod transfer_collateral;
+
+pub mod delegation;
 
 pub mod update_usdt_mint;
 pub mod close_vault;

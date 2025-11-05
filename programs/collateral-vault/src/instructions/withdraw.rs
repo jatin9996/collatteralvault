@@ -10,7 +10,7 @@ use crate::state::CollateralVault;
 pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
 
-    let user = &ctx.accounts.user;
+    let authority = &ctx.accounts.authority; // submitting signer (may or may not be the vault owner)
     let user_token_account = &ctx.accounts.user_token_account;
     let vault_token_account = &ctx.accounts.vault_token_account;
 
@@ -21,12 +21,48 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     let usdt_mint = ctx.accounts.vault.usdt_mint;
     let available_balance = ctx.accounts.vault.available_balance;
 
-    // Authorization and invariant checks
-    require_keys_eq!(vault_owner, user.key(), ErrorCode::Unauthorized);
+    // Authorization: single-owner or multisig
+    let threshold = ctx.accounts.vault.multisig_threshold;
+    if threshold == 0 {
+        // single-owner mode: allow owner or any configured delegate
+        let auth = authority.key();
+        require!(
+            auth == vault_owner || ctx.accounts.vault.delegates.iter().any(|d| *d == auth),
+            ErrorCode::Unauthorized
+        );
+    } else {
+        // multisig: require at least threshold unique configured signers to have signed
+        let allowed: &Vec<Pubkey> = &ctx.accounts.vault.multisig_signers;
+        require!(!allowed.is_empty(), ErrorCode::Unauthorized);
+        require!((threshold as usize) <= allowed.len(), ErrorCode::Unauthorized);
+
+        let mut approved: u8 = 0;
+        let mut seen: std::collections::BTreeSet<Pubkey> = std::collections::BTreeSet::new();
+
+        // count authority if it is in the allowed set
+        if allowed.iter().any(|k| *k == authority.key()) {
+            approved = approved.saturating_add(1);
+            let _ = seen.insert(authority.key());
+        }
+
+        for ai in ctx.remaining_accounts.iter() {
+            if !ai.is_signer { continue; }
+            if seen.contains(&ai.key()) { continue; }
+            if allowed.iter().any(|k| *k == ai.key()) {
+                approved = approved.saturating_add(1);
+                let _ = seen.insert(ai.key());
+                if approved >= threshold { break; }
+            }
+        }
+        require!(approved >= threshold, ErrorCode::Unauthorized);
+    }
+
+    // Business invariants
     require!(available_balance >= amount, ErrorCode::InsufficientFunds);
     // Enforce no-open-positions rule (no locked funds)
     require!(ctx.accounts.vault.locked_balance == 0, ErrorCode::OpenPositionsExist);
-    require_keys_eq!(user_token_account.owner, user.key(), ErrorCode::Unauthorized);
+    // Withdrawals always return to the vault owner ATA
+    require_keys_eq!(user_token_account.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
     require_keys_eq!(user_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.owner, vault_key, ErrorCode::Unauthorized);
@@ -97,14 +133,18 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub authority: Signer<'info>,
+
+    /// Owner pubkey used for PDA derivation; need not sign when multisig is enabled
+    /// CHECK: used for seed derivation and equality check only
+    pub owner: UncheckedAccount<'info>,
 
     // Verify the provided vault PDA belongs to this user
     #[account(
         mut,
-        seeds = [VAULT_SEED, user.key().as_ref()],
+        seeds = [VAULT_SEED, owner.key().as_ref()],
         bump = vault.bump,
-        constraint = vault.owner == user.key() @ ErrorCode::Unauthorized,
+        constraint = vault.owner == owner.key() @ ErrorCode::Unauthorized,
     )]
     pub vault: Account<'info, CollateralVault>,
 

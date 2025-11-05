@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::constants::{MAX_DELEGATES, MAX_MULTISIG_SIGNERS};
 
 #[account]
 #[derive(InitSpace)]
@@ -23,6 +24,15 @@ pub struct CollateralVault {
     pub created_at: i64,               // 8 (unix timestamp)
     pub bump: u8,                      // 1
 
+    // Multisig config (threshold == 0 means disabled)
+    pub multisig_threshold: u8,        // 1
+    #[max_len(MAX_MULTISIG_SIGNERS)]
+    pub multisig_signers: Vec<Pubkey>, // 4 + N*32
+
+    // Per-vault delegated authorities (single-owner mode only)
+    #[max_len(MAX_DELEGATES)]
+    pub delegates: Vec<Pubkey>,        // 4 + M*32
+
     // Reserved for future upgrades to avoid migrations
     pub _reserved: [u8; 64],           // 64
 }
@@ -39,6 +49,9 @@ impl CollateralVault {
         + 8   // total_withdrawn
         + 8   // created_at
         + 1   // bump
+        + 1   // multisig_threshold
+        + 4 + (MAX_MULTISIG_SIGNERS * 32) // multisig_signers vec
+        + 4 + (MAX_DELEGATES * 32)        // delegates vec
         + 64; // reserved
 }
 

@@ -15,7 +15,8 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let vault_token_account = &ctx.accounts.vault_token_account;
 
     // Basic invariant checks
-    require_keys_eq!(user_token_account.owner, ctx.accounts.user.key(), ErrorCode::Unauthorized);
+    // Token owner must be the depositing authority (owner or delegate)
+    require_keys_eq!(user_token_account.owner, ctx.accounts.authority.key(), ErrorCode::Unauthorized);
     require_keys_eq!(user_token_account.mint, vault.usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.mint, vault.usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.owner, vault.key(), ErrorCode::Unauthorized);
@@ -32,11 +33,23 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         ErrorCode::InvalidTokenProgramOwner
     );
 
-    // CPI: transfer tokens from user to vault ATA
+    // Authorization in single-owner mode: owner or delegate
+    let threshold = ctx.accounts.vault.multisig_threshold;
+    if threshold == 0 {
+        let owner = ctx.accounts.owner.key();
+        let auth = ctx.accounts.authority.key();
+        require!(auth == owner || ctx.accounts.vault.delegates.iter().any(|d| *d == auth), ErrorCode::Unauthorized);
+    } else {
+        // In multisig mode, deposits must be initiated by the vault owner signer; delegates are ignored
+        // This keeps semantics simple. Adjust if you need delegates to deposit under multisig.
+        require_keys_eq!(ctx.accounts.owner.key(), ctx.accounts.authority.key(), ErrorCode::Unauthorized);
+    }
+
+    // CPI: transfer tokens from authority to vault ATA
     let cpi_accounts = anchor_spl::token::Transfer {
         from: ctx.accounts.user_token_account.to_account_info(),
         to: ctx.accounts.vault_token_account.to_account_info(),
-        authority: ctx.accounts.user.to_account_info(),
+        authority: ctx.accounts.authority.to_account_info(),
     };
     let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
     anchor_spl::token::transfer(cpi_ctx, amount)?;
@@ -68,14 +81,18 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
 #[derive(Accounts)]
 pub struct Deposit<'info> {
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub authority: Signer<'info>,
 
-    // Verify the provided vault PDA belongs to this user
+    /// The vault owner; may be different from authority if delegate is depositing
+    /// CHECK: used for seeds and equality checks
+    pub owner: UncheckedAccount<'info>,
+
+    // Verify the provided vault PDA belongs to this owner
     #[account(
         mut,
-        seeds = [VAULT_SEED, user.key().as_ref()],
+        seeds = [VAULT_SEED, owner.key().as_ref()],
         bump = vault.bump,
-        constraint = vault.owner == user.key() @ ErrorCode::Unauthorized,
+        constraint = vault.owner == owner.key() @ ErrorCode::Unauthorized,
     )]
     pub vault: Account<'info, CollateralVault>,
 

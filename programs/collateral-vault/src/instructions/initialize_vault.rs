@@ -21,6 +21,9 @@ pub fn handler(ctx: Context<InitializeVault>) -> Result<()> {
     vault.total_withdrawn = 0;
     vault.created_at = Clock::get()?.unix_timestamp;
     vault.bump = bump;
+    vault.multisig_threshold = 0; // disabled by default
+    vault.multisig_signers.clear();
+    vault.delegates.clear();
 
     Ok(())
 }
