@@ -7,6 +7,8 @@ pub const MAX_AUTHORIZED_PROGRAMS: usize = 64; // conservative upper bound for a
 pub const MAX_MULTISIG_SIGNERS: usize = 10; // upper bound for per-vault multisig signers
 pub const MAX_DELEGATES: usize = 16; // per-vault user delegates allowed to act on owner's behalf
 pub const MAX_TIMELOCKS: usize = 64; // max concurrent scheduled timelocks per vault
+pub const MAX_PENDING_WITHDRAWALS: usize = 64; // max pending withdrawal requests per vault
+pub const MAX_WITHDRAW_WHITELIST: usize = 32; // max whitelisted recipient addresses per vault
 
 // Business rules
 // Minimum deposit amount in smallest units (token decimals apply).

@@ -24,6 +24,8 @@ pub use instructions::{
     unlock_collateral,
     schedule_timelock,
     release_timelocks,
+    request_withdraw,
+    withdraw_policy,
     update_usdt_mint,
     yield_deposit,
     yield_withdraw,
@@ -104,6 +106,26 @@ pub mod collateral_vault {
 
     pub fn release_timelocks(ctx: Context<ReleaseTimelocks>) -> Result<()> {
         instructions::release_timelocks::handler(ctx)
+    }
+
+    pub fn request_withdraw(ctx: Context<request_withdraw::RequestWithdraw>, amount: u64) -> Result<()> {
+        instructions::request_withdraw::handler(ctx, amount)
+    }
+
+    pub fn set_withdraw_min_delay(ctx: Context<withdraw_policy::UpdatePolicy>, seconds: i64) -> Result<()> {
+        instructions::withdraw_policy::set_min_delay(ctx, seconds)
+    }
+
+    pub fn set_withdraw_rate_limit(ctx: Context<withdraw_policy::UpdatePolicy>, window_seconds: u32, max_amount: u64) -> Result<()> {
+        instructions::withdraw_policy::set_rate_limit(ctx, window_seconds, max_amount)
+    }
+
+    pub fn add_withdraw_whitelist(ctx: Context<withdraw_policy::UpdatePolicy>, address: Pubkey) -> Result<()> {
+        instructions::withdraw_policy::add_whitelist(ctx, address)
+    }
+
+    pub fn remove_withdraw_whitelist(ctx: Context<withdraw_policy::UpdatePolicy>, address: Pubkey) -> Result<()> {
+        instructions::withdraw_policy::remove_whitelist(ctx, address)
     }
 
     pub fn initialize_vault_authority(

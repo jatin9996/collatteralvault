@@ -85,8 +85,17 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     require!(available_balance >= amount, ErrorCode::InsufficientFunds);
     // Enforce no-open-positions rule (no locked funds)
     require!(ctx.accounts.vault.locked_balance == 0, ErrorCode::OpenPositionsExist);
-    // Withdrawals always return to the vault owner ATA
-    require_keys_eq!(user_token_account.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
+    // Recipient must be owner or on whitelist
+    {
+        let recipient = user_token_account.owner;
+        let is_owner = recipient == ctx.accounts.owner.key();
+        let is_whitelisted = ctx.accounts
+            .vault
+            .withdraw_whitelist
+            .iter()
+            .any(|pk| *pk == recipient);
+        require!(is_owner || is_whitelisted, ErrorCode::Unauthorized);
+    }
     require_keys_eq!(user_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.owner, vault_key, ErrorCode::Unauthorized);
@@ -97,6 +106,61 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         ctx.accounts.token_program.key(),
         ErrorCode::InvalidTokenProgramOwner
     );
+    // Enforce minimum delay via matured pending withdrawals if configured
+    {
+        let now = Clock::get()?.unix_timestamp;
+        let vault_ref = &mut ctx.accounts.vault;
+        if vault_ref.min_withdraw_delay_seconds > 0 {
+            let mut matured_total: u64 = 0;
+            for e in vault_ref.pending_withdrawals.iter() {
+                if e.executable_at <= now {
+                    matured_total = matured_total.checked_add(e.amount).ok_or(ErrorCode::Overflow)?;
+                }
+            }
+            require!(matured_total >= amount, ErrorCode::Unauthorized);
+
+            // consume from matured entries
+            let mut remaining: Vec<crate::types::PendingWithdrawalEntry> = Vec::with_capacity(vault_ref.pending_withdrawals.len());
+            let mut to_consume = amount;
+            for e in vault_ref.pending_withdrawals.iter() {
+                if to_consume == 0 {
+                    remaining.push(*e);
+                    continue;
+                }
+                if e.executable_at <= now {
+                    if e.amount <= to_consume {
+                        to_consume = to_consume.checked_sub(e.amount).ok_or(ErrorCode::Overflow)?;
+                        // drop this entry fully
+                    } else {
+                        // partially consume
+                        let leftover = e.amount.checked_sub(to_consume).ok_or(ErrorCode::Overflow)?;
+                        remaining.push(crate::types::PendingWithdrawalEntry { amount: leftover, requested_at: e.requested_at, executable_at: e.executable_at });
+                        to_consume = 0;
+                    }
+                } else {
+                    remaining.push(*e);
+                }
+            }
+            vault_ref.pending_withdrawals = remaining;
+        }
+    }
+
+    // Enforce rate limiting per vault if configured
+    {
+        let now = Clock::get()?.unix_timestamp;
+        let vault_ref = &mut ctx.accounts.vault;
+        if vault_ref.rate_window_seconds > 0 && vault_ref.rate_limit_amount > 0 {
+            let window = vault_ref.rate_window_seconds as i64;
+            if vault_ref.last_withdrawal_window_start == 0 || now >= vault_ref.last_withdrawal_window_start + window {
+                vault_ref.last_withdrawal_window_start = now;
+                vault_ref.withdrawn_in_window = 0;
+            }
+            let new_used = vault_ref.withdrawn_in_window.checked_add(amount).ok_or(ErrorCode::Overflow)?;
+            require!(new_used <= vault_ref.rate_limit_amount, ErrorCode::Unauthorized);
+            vault_ref.withdrawn_in_window = new_used;
+        }
+    }
+
     require_keys_eq!(
 		*ctx.accounts.vault_token_account.to_account_info().owner,
         ctx.accounts.token_program.key(),

@@ -28,3 +28,11 @@ pub struct TimelockEntry {
 }
 
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+pub struct PendingWithdrawalEntry {
+    pub amount: u64,
+    pub requested_at: i64,
+    pub executable_at: i64,
+}
+
+

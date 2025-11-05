@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
-use crate::constants::{MAX_DELEGATES, MAX_MULTISIG_SIGNERS, MAX_TIMELOCKS};
-use crate::types::TimelockEntry;
+use crate::constants::{MAX_DELEGATES, MAX_MULTISIG_SIGNERS, MAX_TIMELOCKS, MAX_PENDING_WITHDRAWALS, MAX_WITHDRAW_WHITELIST};
+use crate::types::{TimelockEntry, PendingWithdrawalEntry};
 
 #[account]
 #[derive(InitSpace)]
@@ -44,6 +44,22 @@ pub struct CollateralVault {
     #[max_len(MAX_TIMELOCKS)]
     pub timelocks: Vec<TimelockEntry>, // 4 + N*size(TimelockEntry)
 
+    // Security: enforce minimum delay for withdrawals
+    pub min_withdraw_delay_seconds: i64, // 8 (0 disables enforcement)
+    // Pending withdrawal requests subject to min delay
+    #[max_len(MAX_PENDING_WITHDRAWALS)]
+    pub pending_withdrawals: Vec<PendingWithdrawalEntry>, // 4 + N*size(PendingWithdrawalEntry)
+
+    // Security: withdrawal recipient whitelist (owners implicitly allowed)
+    #[max_len(MAX_WITHDRAW_WHITELIST)]
+    pub withdraw_whitelist: Vec<Pubkey>, // 4 + N*32
+
+    // Rate limiting per time window per vault
+    pub rate_window_seconds: u32,      // 4 (0 disables)
+    pub rate_limit_amount: u64,        // 8 (max amount per window)
+    pub last_withdrawal_window_start: i64, // 8 (unix ts of window start)
+    pub withdrawn_in_window: u64,      // 8 (used amount in window)
+
     // Reserved for future upgrades to avoid migrations
     pub _reserved: [u8; 64],           // 64
 }
@@ -68,6 +84,13 @@ impl CollateralVault {
         + 4 + (MAX_MULTISIG_SIGNERS * 32) // multisig_signers vec
         + 4 + (MAX_DELEGATES * 32)        // delegates vec
         + 4 + (MAX_TIMELOCKS * (8 + 8))   // timelocks vec (u64 + i64)
+        + 8   // min_withdraw_delay_seconds
+        + 4 + (MAX_PENDING_WITHDRAWALS * (8 + 8 + 8)) // pending_withdrawals vec
+        + 4 + (MAX_WITHDRAW_WHITELIST * 32) // withdraw_whitelist vec
+        + 4   // rate_window_seconds
+        + 8   // rate_limit_amount
+        + 8   // last_withdrawal_window_start
+        + 8   // withdrawn_in_window
         + 64; // reserved
 }
 

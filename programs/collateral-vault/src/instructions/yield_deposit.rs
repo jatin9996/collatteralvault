@@ -5,6 +5,8 @@ use crate::error::ErrorCode;
 use crate::events::{TransactionEvent, YieldDepositEvent};
 use crate::state::{CollateralVault, VaultAuthority};
 use crate::types::TransactionType;
+use anchor_lang::solana_program::program::invoke_signed;
+use anchor_lang::solana_program::instruction::{Instruction, AccountMeta};
 
 pub fn handler(ctx: Context<YieldDeposit>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
@@ -82,6 +84,26 @@ pub fn handler(ctx: Context<YieldDeposit>, amount: u64) -> Result<()> {
         amount,
         timestamp: Clock::get()?.unix_timestamp,
     });
+
+    // Optional generic CPI passthrough: if remaining accounts are provided and caller
+    // constructed the external instruction off-chain, the runtime can attempt to
+    // execute it with the vault PDA as signer. This allows protocol-specific routing
+    // without baking program specifics here.
+    let signer_seeds: &[&[u8]] = &[crate::constants::VAULT_SEED, ctx.accounts.vault.owner.as_ref(), &[ctx.accounts.vault.bump]];
+    let signer: &[&[&[u8]]] = &[signer_seeds];
+    let remaining = ctx.remaining_accounts;
+    if !remaining.is_empty() {
+        // Build metas by mirroring remaining account properties
+        let metas: Vec<AccountMeta> = remaining
+            .iter()
+            .map(|ai| AccountMeta { pubkey: ai.key(), is_signer: ai.is_signer || ai.key() == ctx.accounts.vault.key(), is_writable: ai.is_writable })
+            .collect();
+        // Expect first remaining account to be the external program id info
+        let program_id = ctx.accounts.yield_program.key();
+        // No opaque data here; when wiring real integrations, pass proper data via a companion ix
+        let ix = Instruction { program_id, accounts: metas, data: vec![] };
+        let _ = invoke_signed(&ix, remaining, signer);
+    }
 
     Ok(())
 }

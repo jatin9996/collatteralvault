@@ -4,6 +4,8 @@ use crate::constants::VAULT_SEED;
 use crate::error::ErrorCode;
 use crate::events::YieldCompoundEvent;
 use crate::state::{CollateralVault, VaultAuthority};
+use anchor_lang::solana_program::program::invoke_signed;
+use anchor_lang::solana_program::instruction::{Instruction, AccountMeta};
 
 pub fn handler(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()> {
     // Authorization: single-owner or multisig
@@ -69,6 +71,20 @@ pub fn handler(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()
         new_yield_balance: vault.yield_deposited_balance,
         last_compounded_at: vault.last_compounded_at,
     });
+
+    // Optional CPI passthrough to claim/reinvest rewards
+    let signer_seeds: &[&[u8]] = &[crate::constants::VAULT_SEED, ctx.accounts.vault.owner.as_ref(), &[ctx.accounts.vault.bump]];
+    let signer: &[&[&[u8]]] = &[signer_seeds];
+    let remaining = ctx.remaining_accounts;
+    if !remaining.is_empty() {
+        let metas: Vec<AccountMeta> = remaining
+            .iter()
+            .map(|ai| AccountMeta { pubkey: ai.key(), is_signer: ai.is_signer || ai.key() == ctx.accounts.vault.key(), is_writable: ai.is_writable })
+            .collect();
+        let program_id = ctx.accounts.yield_program.key();
+        let ix = Instruction { program_id, accounts: metas, data: vec![] };
+        let _ = invoke_signed(&ix, remaining, signer);
+    }
 
     Ok(())
 }

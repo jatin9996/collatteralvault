@@ -6,6 +6,8 @@ pub mod unlock_collateral;
 pub mod authority;
 pub mod schedule_timelock;
 pub mod release_timelocks;
+pub mod request_withdraw;
+pub mod withdraw_policy;
 
 pub mod multisig;
 pub mod transfer_collateral;

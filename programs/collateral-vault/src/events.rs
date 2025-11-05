@@ -154,4 +154,42 @@ pub struct YieldCompoundEvent {
     pub last_compounded_at: i64,
 }
 
+// -----------------
+// Security Policy Updates & Requests
+// -----------------
+
+#[event]
+pub struct WithdrawRequestedEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub amount: u64,
+    pub requested_at: i64,
+    pub executable_at: i64,
+    pub remaining_pending: u32,
+}
+
+#[event]
+pub struct WithdrawMinDelaySetEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub seconds: i64,
+}
+
+#[event]
+pub struct WithdrawRateLimitSetEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub window_seconds: u32,
+    pub max_amount: u64,
+}
+
+#[event]
+pub struct WithdrawWhitelistUpdatedEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub address: Pubkey,
+    pub added: bool,
+    pub new_len: u32,
+}
+
 

@@ -5,6 +5,8 @@ use crate::error::ErrorCode;
 use crate::events::{TransactionEvent, YieldWithdrawEvent};
 use crate::state::{CollateralVault, VaultAuthority};
 use crate::types::TransactionType;
+use anchor_lang::solana_program::program::invoke_signed;
+use anchor_lang::solana_program::instruction::{Instruction, AccountMeta};
 
 pub fn handler(ctx: Context<YieldWithdraw>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
@@ -77,6 +79,20 @@ pub fn handler(ctx: Context<YieldWithdraw>, amount: u64) -> Result<()> {
         amount,
         timestamp: Clock::get()?.unix_timestamp,
     });
+
+    // Optional generic CPI passthrough (see yield_deposit): run external ix with PDA signer
+    let signer_seeds: &[&[u8]] = &[crate::constants::VAULT_SEED, ctx.accounts.vault.owner.as_ref(), &[ctx.accounts.vault.bump]];
+    let signer: &[&[&[u8]]] = &[signer_seeds];
+    let remaining = ctx.remaining_accounts;
+    if !remaining.is_empty() {
+        let metas: Vec<AccountMeta> = remaining
+            .iter()
+            .map(|ai| AccountMeta { pubkey: ai.key(), is_signer: ai.is_signer || ai.key() == ctx.accounts.vault.key(), is_writable: ai.is_writable })
+            .collect();
+        let program_id = ctx.accounts.yield_program.key();
+        let ix = Instruction { program_id, accounts: metas, data: vec![] };
+        let _ = invoke_signed(&ix, remaining, signer);
+    }
 
     Ok(())
 }
