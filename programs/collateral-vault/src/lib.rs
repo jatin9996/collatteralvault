@@ -7,51 +7,30 @@ pub mod state;
 pub mod instructions;
 pub mod types;
 
-// Re-export instruction modules at crate root so `#[program]` macro can
-// reference generated client helpers under `crate::<ix_mod>::__client_accounts_*`
-pub use instructions::{
-    authority,
-    close_vault,
-    deposit,
-        delegation,
-    multisig,
-    withdraw,
-    emergency_withdraw,
-    get_vault_info,
-    initialize_vault,
-    lock_collateral,
-    transfer_collateral,
-    unlock_collateral,
-    schedule_timelock,
-    release_timelocks,
-    request_withdraw,
-    withdraw_policy,
-    update_usdt_mint,
-    yield_deposit,
-    yield_withdraw,
-    compound_yield,
-};
+pub use instructions::*;
 
+// Bring Accounts structs into scope for #[program] visibility.
+use authority::{InitializeVaultAuthority, UpdateVaultAuthority};
+use close_vault::CloseVault;
+use compound_yield::CompoundYield;
+use delegation::UpdateDelegates;
+use deposit::Deposit;
+use emergency_withdraw::EmergencyWithdraw;
+use get_vault_info::GetVaultInfo;
+use initialize_vault::InitializeVault;
+use lock_collateral::LockCollateral;
+use multisig::SetVaultMultisig;
+use release_timelocks::ReleaseTimelocks;
+use request_withdraw::RequestWithdraw;
+use schedule_timelock::ScheduleTimelock;
+use transfer_collateral::TransferCollateral;
+use unlock_collateral::UnlockCollateral;
+use update_usdt_mint::UpdateUsdtMint;
+use withdraw::Withdraw;
+use withdraw_policy::UpdatePolicy;
+use yield_deposit::YieldDeposit;
+use yield_withdraw::YieldWithdraw;
 
-
-// Re-export account context types at crate root to satisfy Anchor macro expectations
-pub use instructions::initialize_vault::InitializeVault;
-pub use instructions::deposit::Deposit;
-pub use instructions::withdraw::Withdraw;
-pub use instructions::lock_collateral::LockCollateral;
-pub use instructions::unlock_collateral::UnlockCollateral;
-pub use instructions::schedule_timelock::ScheduleTimelock;
-pub use instructions::release_timelocks::ReleaseTimelocks;
-pub use instructions::authority::{InitializeVaultAuthority, UpdateVaultAuthority};
-pub use instructions::transfer_collateral::TransferCollateral;
-pub use instructions::delegation::UpdateDelegates;
-pub use instructions::update_usdt_mint::UpdateUsdtMint;
-pub use instructions::close_vault::CloseVault;
-pub use instructions::get_vault_info::GetVaultInfo;
-pub use instructions::emergency_withdraw::EmergencyWithdraw;
-pub use instructions::yield_deposit::YieldDeposit as YieldDepositCtx;
-pub use instructions::yield_withdraw::YieldWithdraw as YieldWithdrawCtx;
-pub use instructions::compound_yield::CompoundYield as CompoundYieldCtx;
 
 
 declare_id!("Af5t3U1fEgZQGkQ92uUANSvDRd4qNTBKTQ5tTs7n8g4q");
@@ -80,11 +59,11 @@ pub mod collateral_vault {
         instructions::emergency_withdraw::handler(ctx, amount)
     }
 
-    pub fn set_vault_multisig(ctx: Context<multisig::SetVaultMultisig>, signers: Vec<Pubkey>, threshold: u8) -> Result<()> {
+    pub fn set_vault_multisig(ctx: Context<SetVaultMultisig>, signers: Vec<Pubkey>, threshold: u8) -> Result<()> {
         instructions::multisig::set_vault_multisig(ctx, signers, threshold)
     }
 
-    pub fn disable_vault_multisig(ctx: Context<multisig::SetVaultMultisig>) -> Result<()> {
+    pub fn disable_vault_multisig(ctx: Context<SetVaultMultisig>) -> Result<()> {
         instructions::multisig::disable_vault_multisig(ctx)
     }
 
@@ -96,9 +75,9 @@ pub mod collateral_vault {
         instructions::unlock_collateral::handler(ctx, amount)
     }
 
-	pub fn transfer_collateral(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
-		instructions::transfer_collateral::handler(ctx, amount)
-	}
+    pub fn transfer_collateral(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
+        instructions::transfer_collateral::handler(ctx, amount)
+    }
 
     pub fn schedule_timelock(ctx: Context<ScheduleTimelock>, amount: u64, duration_seconds: i64) -> Result<()> {
         instructions::schedule_timelock::handler(ctx, amount, duration_seconds)
@@ -108,23 +87,23 @@ pub mod collateral_vault {
         instructions::release_timelocks::handler(ctx)
     }
 
-    pub fn request_withdraw(ctx: Context<request_withdraw::RequestWithdraw>, amount: u64) -> Result<()> {
+    pub fn request_withdraw(ctx: Context<RequestWithdraw>, amount: u64) -> Result<()> {
         instructions::request_withdraw::handler(ctx, amount)
     }
 
-    pub fn set_withdraw_min_delay(ctx: Context<withdraw_policy::UpdatePolicy>, seconds: i64) -> Result<()> {
+    pub fn set_withdraw_min_delay(ctx: Context<UpdatePolicy>, seconds: i64) -> Result<()> {
         instructions::withdraw_policy::set_min_delay(ctx, seconds)
     }
 
-    pub fn set_withdraw_rate_limit(ctx: Context<withdraw_policy::UpdatePolicy>, window_seconds: u32, max_amount: u64) -> Result<()> {
+    pub fn set_withdraw_rate_limit(ctx: Context<UpdatePolicy>, window_seconds: u32, max_amount: u64) -> Result<()> {
         instructions::withdraw_policy::set_rate_limit(ctx, window_seconds, max_amount)
     }
 
-    pub fn add_withdraw_whitelist(ctx: Context<withdraw_policy::UpdatePolicy>, address: Pubkey) -> Result<()> {
+    pub fn add_withdraw_whitelist(ctx: Context<UpdatePolicy>, address: Pubkey) -> Result<()> {
         instructions::withdraw_policy::add_whitelist(ctx, address)
     }
 
-    pub fn remove_withdraw_whitelist(ctx: Context<withdraw_policy::UpdatePolicy>, address: Pubkey) -> Result<()> {
+    pub fn remove_withdraw_whitelist(ctx: Context<UpdatePolicy>, address: Pubkey) -> Result<()> {
         instructions::withdraw_policy::remove_whitelist(ctx, address)
     }
 
@@ -164,11 +143,11 @@ pub mod collateral_vault {
         instructions::authority::set_risk_level(ctx, risk_level)
     }
 
-    pub fn add_delegate(ctx: Context<delegation::UpdateDelegates>, delegate: Pubkey) -> Result<()> {
+    pub fn add_delegate(ctx: Context<UpdateDelegates>, delegate: Pubkey) -> Result<()> {
         instructions::delegation::add_delegate(ctx, delegate)
     }
 
-    pub fn remove_delegate(ctx: Context<delegation::UpdateDelegates>, delegate: Pubkey) -> Result<()> {
+    pub fn remove_delegate(ctx: Context<UpdateDelegates>, delegate: Pubkey) -> Result<()> {
         instructions::delegation::remove_delegate(ctx, delegate)
     }
 
@@ -184,30 +163,31 @@ pub mod collateral_vault {
         Ok(())
     }
 
-    pub fn yield_deposit(ctx: Context<yield_deposit::YieldDeposit>, amount: u64) -> Result<()> {
+    pub fn yield_deposit(ctx: Context<YieldDeposit>, amount: u64) -> Result<()> {
         instructions::yield_deposit::handler(ctx, amount)
     }
 
-    pub fn yield_withdraw(ctx: Context<yield_withdraw::YieldWithdraw>, amount: u64) -> Result<()> {
+    pub fn yield_withdraw(ctx: Context<YieldWithdraw>, amount: u64) -> Result<()> {
         instructions::yield_withdraw::handler(ctx, amount)
     }
 
-    pub fn compound_yield(ctx: Context<compound_yield::CompoundYield>, compounded_amount: u64) -> Result<()> {
+    pub fn compound_yield(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()> {
         instructions::compound_yield::handler(ctx, compounded_amount)
     }
 }
 
 #[derive(Accounts)]
-pub struct Initialize {}
+pub struct Initialize<'info> {
+    #[account(address = anchor_lang::system_program::ID)]
+    pub system_program: Program<'info, anchor_lang::system_program::System>,
+}
 
 // ----------------------------
 // Unit tests (serialization roundtrip)
 // ----------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anchor_lang::prelude::*;
     use crate::state::{CollateralVault, VaultAuthority};
 
     #[test]
@@ -231,14 +211,20 @@ mod tests {
             multisig_signers: vec![],
             delegates: vec![],
             timelocks: vec![],
+            min_withdraw_delay_seconds: 0,
+            pending_withdrawals: vec![],
+            withdraw_whitelist: vec![],
+            rate_window_seconds: 0,
+            rate_limit_amount: 0,
+            last_withdrawal_window_start: 0,
+            withdrawn_in_window: 0,
             _reserved: [0u8; 64],
         };
 
-        // basic invariant: total = locked + available (not enforced here, but a common expectation)
         vault.total_balance = vault.locked_balance + vault.available_balance;
 
-        let data = vault.try_to_vec().expect("serialize");
-        let back = CollateralVault::try_from_slice(&data).expect("deserialize");
+        let data = vault.try_to_vec().unwrap();
+        let back = CollateralVault::try_from_slice(&data).unwrap();
         assert_eq!(vault.owner, back.owner);
         assert_eq!(vault.token_account, back.token_account);
         assert_eq!(vault.usdt_mint, back.usdt_mint);
@@ -254,10 +240,7 @@ mod tests {
     #[test]
     fn vault_authority_serde_roundtrip() {
         let governance = Pubkey::new_unique();
-        let mut programs = Vec::new();
-        for _ in 0..4 {
-            programs.push(Pubkey::new_unique());
-        }
+        let programs = (0..4).map(|_| Pubkey::new_unique()).collect::<Vec<_>>();
 
         let va = VaultAuthority {
             governance,
@@ -270,8 +253,8 @@ mod tests {
             _reserved: [0u8; 64],
         };
 
-        let data = va.try_to_vec().expect("serialize");
-        let back = VaultAuthority::try_from_slice(&data).expect("deserialize");
+        let data = va.try_to_vec().unwrap();
+        let back = VaultAuthority::try_from_slice(&data).unwrap();
         assert_eq!(back.governance, governance);
         assert_eq!(back.authorized_programs.len(), programs.len());
         assert_eq!(back.bump, 200);

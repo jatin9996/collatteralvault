@@ -42,8 +42,9 @@ pub struct OpenPosition<'info> {
     /// Vault authority of the downstream program
     pub vault_authority: Account<'info, collateral_vault::state::VaultAuthority>,
 
-    /// System Instructions sysvar (for CPI-origin enforcement on downstream program when enabled)
-    pub instructions: Sysvar<'info, Instructions>,
+    /// CHECK: address constraint pins this to the instructions sysvar PDA
+    #[account(address = anchor_lang::solana_program::sysvar::instructions::ID)]
+    pub instructions: AccountInfo<'info>,
 
     /// Target vault to lock against
     pub vault: Account<'info, collateral_vault::state::CollateralVault>,
@@ -60,8 +61,9 @@ pub struct ClosePosition<'info> {
     /// Vault authority of the downstream program
     pub vault_authority: Account<'info, collateral_vault::state::VaultAuthority>,
 
-    /// System Instructions sysvar (for CPI-origin enforcement on downstream program when enabled)
-    pub instructions: Sysvar<'info, Instructions>,
+    /// CHECK: address constraint pins this to the instructions sysvar PDA
+    #[account(address = anchor_lang::solana_program::sysvar::instructions::ID)]
+    pub instructions: AccountInfo<'info>,
 
     /// Target vault to unlock against
     pub vault: Account<'info, collateral_vault::state::CollateralVault>,

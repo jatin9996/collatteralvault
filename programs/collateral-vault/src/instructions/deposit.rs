@@ -10,16 +10,19 @@ use crate::state::CollateralVault;
 pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(amount >= MIN_DEPOSIT, ErrorCode::InvalidAmount);
 
-    let vault = &mut ctx.accounts.vault;
-    let user_token_account = &ctx.accounts.user_token_account;
-    let vault_token_account = &ctx.accounts.vault_token_account;
+	let user_token_account = &ctx.accounts.user_token_account;
+	let vault_token_account = &ctx.accounts.vault_token_account;
+
+	// Cache frequently used immutable fields before any mutable borrow
+	let usdt_mint = ctx.accounts.vault.usdt_mint;
+	let vault_key = ctx.accounts.vault.key();
 
     // Basic invariant checks
     // Token owner must be the depositing authority (owner or delegate)
     require_keys_eq!(user_token_account.owner, ctx.accounts.authority.key(), ErrorCode::Unauthorized);
-    require_keys_eq!(user_token_account.mint, vault.usdt_mint, ErrorCode::Unauthorized);
-    require_keys_eq!(vault_token_account.mint, vault.usdt_mint, ErrorCode::Unauthorized);
-    require_keys_eq!(vault_token_account.owner, vault.key(), ErrorCode::Unauthorized);
+	require_keys_eq!(user_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
+	require_keys_eq!(vault_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
+	require_keys_eq!(vault_token_account.owner, vault_key, ErrorCode::Unauthorized);
 
     // Explicitly assert token accounts are owned by the token program
     require_keys_eq!(
@@ -54,26 +57,29 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
     anchor_spl::token::transfer(cpi_ctx, amount)?;
 
-    // Update balances with checked arithmetic
-    vault.total_balance = vault.total_balance.checked_add(amount).ok_or(ErrorCode::Overflow)?;
-    vault.available_balance = vault.available_balance.checked_add(amount).ok_or(ErrorCode::Overflow)?;
-    vault.total_deposited = vault.total_deposited.checked_add(amount).ok_or(ErrorCode::Overflow)?;
+	// Update balances with checked arithmetic (limit mutable borrow scope)
+	{
+		let vault = &mut ctx.accounts.vault;
+		vault.total_balance = vault.total_balance.checked_add(amount).ok_or(ErrorCode::Overflow)?;
+		vault.available_balance = vault.available_balance.checked_add(amount).ok_or(ErrorCode::Overflow)?;
+		vault.total_deposited = vault.total_deposited.checked_add(amount).ok_or(ErrorCode::Overflow)?;
+	}
 
-    emit!(DepositEvent {
-        vault: vault.key(),
-        owner: vault.owner,
-        amount,
-        new_total_balance: vault.total_balance,
-        new_available_balance: vault.available_balance,
-    });
+	emit!(DepositEvent {
+		vault: vault_key,
+		owner: ctx.accounts.vault.owner,
+		amount,
+		new_total_balance: ctx.accounts.vault.total_balance,
+		new_available_balance: ctx.accounts.vault.available_balance,
+	});
 
-    emit!(TransactionEvent {
-        vault: vault.key(),
-        owner: vault.owner,
-        transaction_type: TransactionType::Deposit,
-        amount,
-        timestamp: Clock::get()?.unix_timestamp,
-    });
+	emit!(TransactionEvent {
+		vault: vault_key,
+		owner: ctx.accounts.vault.owner,
+		transaction_type: TransactionType::Deposit,
+		amount,
+		timestamp: Clock::get()?.unix_timestamp,
+	});
 
     Ok(())
 }
