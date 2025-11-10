@@ -32,6 +32,10 @@ pub enum ErrorCode {
     YieldProgramNotWhitelisted,
     #[msg("Insufficient yield balance")] 
     InsufficientYieldBalance,
+    #[msg("Missing position summary for authorized program")]
+    PositionSummaryMissing,
+    #[msg("Invalid position summary supplied")]
+    PositionSummaryInvalid,
 }
 
 

@@ -35,4 +35,17 @@ pub struct PendingWithdrawalEntry {
     pub executable_at: i64,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PositionSummary {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub open_positions: u64,
+    pub locked_amount: u64,
+    pub last_updated_slot: u64,
+}
+
+impl PositionSummary {
+    pub const LEN: usize = 32 + 32 + 8 + 8 + 8;
+}
+
 

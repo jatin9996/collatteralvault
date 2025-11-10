@@ -76,6 +76,10 @@ describe("CPI: mock-position-manager open/close position with CPI enforcement", 
       vaultProgram.programId
     );
     const vaultAta = await getAssociatedTokenAddress(mint, vaultPda, true);
+    const [summaryPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("position_summary"), vaultPda.toBuffer()],
+      mockProgram.programId
+    );
 
     await vaultProgram.methods
       .initializeVault()
@@ -104,6 +108,17 @@ describe("CPI: mock-position-manager open/close position with CPI enforcement", 
       .signers([owner])
       .rpc();
 
+    await mockProgram.methods
+      .initPositionSummary()
+      .accounts({
+        payer: owner.publicKey,
+        vault: vaultPda,
+        positionSummary: summaryPda,
+        systemProgram: web3.SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+
     // CPI: open position (lock 0.2)
     await mockProgram.methods
       .openPosition(new BN(200_000))
@@ -112,6 +127,7 @@ describe("CPI: mock-position-manager open/close position with CPI enforcement", 
         vaultAuthority: vaPda,
         instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         vault: vaultPda,
+        positionSummary: summaryPda,
         collateralVaultProgram: vaultProgram.programId,
       })
       .rpc();
@@ -128,6 +144,7 @@ describe("CPI: mock-position-manager open/close position with CPI enforcement", 
         vaultAuthority: vaPda,
         instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         vault: vaultPda,
+        positionSummary: summaryPda,
         collateralVaultProgram: vaultProgram.programId,
       })
       .rpc();
@@ -183,6 +200,10 @@ describe("CPI: mock-position-manager open/close position with CPI enforcement", 
       vaultProgram.programId
     );
     const vaultAta = await getAssociatedTokenAddress(mint, vaultPda, true);
+    const [summaryPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("position_summary"), vaultPda.toBuffer()],
+      mockProgram.programId
+    );
     await vaultProgram.methods
       .initializeVault()
       .accountsPartial({
@@ -198,6 +219,17 @@ describe("CPI: mock-position-manager open/close position with CPI enforcement", 
       .signers([owner])
       .rpc();
 
+    await mockProgram.methods
+      .initPositionSummary()
+      .accounts({
+        payer: owner.publicKey,
+        vault: vaultPda,
+        positionSummary: summaryPda,
+        systemProgram: web3.SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+
     let threw = false;
     try {
       await mockProgram.methods
@@ -207,6 +239,7 @@ describe("CPI: mock-position-manager open/close position with CPI enforcement", 
           vaultAuthority: vaPda,
           instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
           vault: vaultPda,
+          positionSummary: summaryPda,
           collateralVaultProgram: vaultProgram.programId,
         })
         .rpc();

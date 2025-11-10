@@ -1,11 +1,11 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount};
 
-use crate::constants::VAULT_SEED;
+use crate::constants::{VAULT_AUTHORITY_SEED, VAULT_SEED};
 use crate::error::ErrorCode;
 use crate::events::{TransactionEvent, WithdrawEvent};
-use crate::types::TransactionType;
-use crate::state::CollateralVault;
+use crate::state::{CollateralVault, VaultAuthority};
+use crate::types::{PositionSummary, TransactionType};
 
 pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
@@ -19,7 +19,15 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     let vault_bump = ctx.accounts.vault.bump;
     let vault_key = ctx.accounts.vault.key();
     let usdt_mint = ctx.accounts.vault.usdt_mint;
-    let available_balance = ctx.accounts.vault.available_balance;
+
+    let authorized_programs = ctx.accounts.vault_authority.authorized_programs.clone();
+    require!(
+        ctx.remaining_accounts.len() >= authorized_programs.len(),
+        ErrorCode::PositionSummaryMissing
+    );
+    let (summary_accounts, signer_accounts) = ctx
+        .remaining_accounts
+        .split_at(authorized_programs.len());
 
     // Authorization: single-owner or multisig
     let threshold = ctx.accounts.vault.multisig_threshold;
@@ -45,7 +53,7 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
             let _ = seen.insert(authority.key());
         }
 
-        for ai in ctx.remaining_accounts.iter() {
+        for ai in signer_accounts.iter() {
             if !ai.is_signer { continue; }
             if seen.contains(&ai.key()) { continue; }
             if allowed.iter().any(|k| *k == ai.key()) {
@@ -79,6 +87,36 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
                 .ok_or(ErrorCode::Overflow)?;
         }
         vault_ref.timelocks = remaining;
+    }
+
+    // Refresh available balance snapshot after potential timelock releases
+    let available_balance = ctx.accounts.vault.available_balance;
+
+    // Validate position summaries supplied by authorized programs
+    if !authorized_programs.is_empty() {
+        let mut covered: std::collections::BTreeSet<Pubkey> = std::collections::BTreeSet::new();
+        for summary_ai in summary_accounts.iter() {
+            let owner_program = *summary_ai.owner;
+            require!(
+                authorized_programs.iter().any(|p| *p == owner_program),
+                ErrorCode::PositionSummaryInvalid
+            );
+            require!(!summary_ai.data_is_empty(), ErrorCode::PositionSummaryInvalid);
+            let data = summary_ai.try_borrow_data()?;
+            require!(data.len() >= 8, ErrorCode::PositionSummaryInvalid);
+            let summary = PositionSummary::try_from_slice(&data[8..])
+                .map_err(|_| ErrorCode::PositionSummaryInvalid)?;
+            drop(data);
+            require_keys_eq!(summary.vault, vault_key, ErrorCode::PositionSummaryInvalid);
+            require_keys_eq!(summary.owner, vault_owner, ErrorCode::PositionSummaryInvalid);
+            require!(summary.open_positions == 0, ErrorCode::OpenPositionsExist);
+            require!(summary.locked_amount == 0, ErrorCode::OpenPositionsExist);
+            covered.insert(owner_program);
+        }
+        require!(
+            covered.len() == authorized_programs.len(),
+            ErrorCode::PositionSummaryMissing
+        );
     }
 
     // Business invariants
@@ -235,6 +273,12 @@ pub struct Withdraw<'info> {
         constraint = vault.owner == owner.key() @ ErrorCode::Unauthorized,
     )]
     pub vault: Account<'info, CollateralVault>,
+
+    #[account(
+        seeds = [VAULT_AUTHORITY_SEED],
+        bump = vault_authority.bump,
+    )]
+    pub vault_authority: Account<'info, VaultAuthority>,
 
     #[account(mut)]
     pub vault_token_account: Account<'info, TokenAccount>,

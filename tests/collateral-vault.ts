@@ -2,6 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { expect } from "chai";
 import { Program, web3, BN } from "@coral-xyz/anchor";
 import { CollateralVault } from "../target/types/collateral_vault";
+import { MockPositionManager } from "../target/types/mock_position_manager";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -18,6 +19,94 @@ describe("collateral-vault", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace.collateralVault as Program<CollateralVault>;
+  const mockProgram = anchor.workspace.mockPositionManager as Program<MockPositionManager>;
+  const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("vault_authority")],
+    program.programId
+  );
+
+  const ensureVaultAuthority = async (
+    authorizedPrograms: web3.PublicKey[] = [],
+    options: { cpiEnforced?: boolean } = {}
+  ) => {
+    const governance = provider.wallet as anchor.Wallet;
+    let va: any;
+    try {
+      va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+    } catch (_) {
+      await program.methods
+        .initializeVaultAuthority(authorizedPrograms, false)
+        .accountsPartial({
+          governance: governance.publicKey,
+          vaultAuthority: vaultAuthorityPda,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .rpc();
+      va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+    }
+
+    const desired = new Set(authorizedPrograms.map((p) => p.toBase58()));
+    const current = new Set((va.authorizedPrograms as web3.PublicKey[]).map((p) => p.toBase58()));
+
+    for (const existing of current) {
+      if (!desired.has(existing)) {
+        await (program as any).methods
+          .removeAuthorizedProgram(new web3.PublicKey(existing))
+          .accountsPartial({
+            governance: governance.publicKey,
+            vaultAuthority: vaultAuthorityPda,
+          })
+          .rpc();
+      }
+    }
+
+    for (const want of desired) {
+      if (!current.has(want)) {
+        await (program as any).methods
+          .addAuthorizedProgram(new web3.PublicKey(want))
+          .accountsPartial({
+            governance: governance.publicKey,
+            vaultAuthority: vaultAuthorityPda,
+          })
+          .rpc();
+      }
+    }
+
+    if (options.cpiEnforced !== undefined) {
+      const refreshed = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
+      if (refreshed.cpiEnforced !== options.cpiEnforced) {
+        await (program as any).methods
+          .setCpiEnforced(options.cpiEnforced)
+          .accountsPartial({
+            governance: governance.publicKey,
+            vaultAuthority: vaultAuthorityPda,
+          })
+          .rpc();
+      }
+    }
+  };
+
+  const ensurePositionSummary = async (vault: web3.PublicKey, payer: web3.Keypair) => {
+    const [summaryPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("position_summary"), vault.toBuffer()],
+      mockProgram.programId
+    );
+    try {
+      await mockProgram.account.positionSummaryAccount.fetch(summaryPda);
+    } catch (_) {
+      await mockProgram.methods
+        .initPositionSummary()
+        .accounts({
+          payer: payer.publicKey,
+          vault,
+          positionSummary: summaryPda,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .signers([payer])
+        .rpc();
+    }
+    return summaryPda;
+  };
 
   it("initialize_vault creates PDA vault and ATA", async () => {
     const user = provider.wallet as anchor.Wallet;
@@ -352,6 +441,8 @@ describe("collateral-vault", () => {
     const user = provider.wallet as anchor.Wallet;
     const connection = provider.connection;
 
+    await ensureVaultAuthority([]);
+
     const owner = web3.Keypair.generate();
     await connection.confirmTransaction(
       await connection.requestAirdrop(owner.publicKey, web3.LAMPORTS_PER_SOL),
@@ -420,6 +511,7 @@ describe("collateral-vault", () => {
       .accountsPartial({
         user: owner.publicKey,
         vault: vaultPda,
+        vaultAuthority: vaultAuthorityPda,
         vaultTokenAccount: vaultAta,
         userTokenAccount: ownerAta.address,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -442,6 +534,8 @@ describe("collateral-vault", () => {
   it("withdraw fails when amount exceeds available", async () => {
     const user = provider.wallet as anchor.Wallet;
     const connection = provider.connection;
+
+    await ensureVaultAuthority([]);
 
     const owner = web3.Keypair.generate();
     await connection.confirmTransaction(
@@ -512,6 +606,7 @@ describe("collateral-vault", () => {
         .accountsPartial({
           user: owner.publicKey,
           vault: vaultPda,
+          vaultAuthority: vaultAuthorityPda,
           vaultTokenAccount: vaultAta,
           userTokenAccount: ownerAta.address,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -527,6 +622,8 @@ describe("collateral-vault", () => {
   it("unauthorized user cannot withdraw from another user's vault", async () => {
     const user = provider.wallet as anchor.Wallet;
     const connection = provider.connection;
+
+    await ensureVaultAuthority([]);
 
     const alice = web3.Keypair.generate();
     const bob = web3.Keypair.generate();
@@ -609,6 +706,7 @@ describe("collateral-vault", () => {
         .accountsPartial({
           user: bob.publicKey,
           vault: aliceVaultPda,
+          vaultAuthority: vaultAuthorityPda,
           vaultTokenAccount: aliceVaultAta,
           userTokenAccount: bobAta.address,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -621,6 +719,122 @@ describe("collateral-vault", () => {
     expect(threw).to.eq(true);
   });
 
+  it("withdraw requires position summary when authorized programs exist", async () => {
+    const user = provider.wallet as anchor.Wallet;
+    const connection = provider.connection;
+
+    await ensureVaultAuthority([mockProgram.programId]);
+
+    const owner = web3.Keypair.generate();
+    await connection.confirmTransaction(
+      await connection.requestAirdrop(owner.publicKey, web3.LAMPORTS_PER_SOL),
+      "confirmed"
+    );
+
+    const usdtMint = await createMint(
+      connection,
+      (user as any).payer,
+      user.publicKey,
+      null,
+      6
+    );
+    const ownerAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      (user as any).payer,
+      usdtMint,
+      owner.publicKey
+    );
+    await mintTo(
+      connection,
+      (user as any).payer,
+      usdtMint,
+      ownerAta.address,
+      user.publicKey,
+      500_000n
+    );
+
+    const [vaultPda] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), owner.publicKey.toBuffer()],
+      program.programId
+    );
+    const vaultAta = await getAssociatedTokenAddress(usdtMint, vaultPda, true);
+
+    await program.methods
+      .initializeVault()
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        vaultTokenAccount: vaultAta,
+        usdtMint,
+        systemProgram: web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        rent: web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([owner])
+      .rpc();
+
+    await program.methods
+      .deposit(new BN(300_000))
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        userTokenAccount: ownerAta.address,
+        vaultTokenAccount: vaultAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([owner])
+      .rpc();
+
+    const summaryPda = await ensurePositionSummary(vaultPda, owner);
+
+    let missingSummaryThrew = false;
+    try {
+      await (program as any).methods
+        .withdraw(new BN(100_000))
+        .accountsPartial({
+          user: owner.publicKey,
+          vault: vaultPda,
+          vaultAuthority: vaultAuthorityPda,
+          vaultTokenAccount: vaultAta,
+          userTokenAccount: ownerAta.address,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([owner])
+        .rpc();
+    } catch (err) {
+      missingSummaryThrew = true;
+      const anchorErr = err as anchor.AnchorError;
+      if (anchorErr?.error?.errorCode?.number !== undefined) {
+        expect(anchorErr.error.errorCode.number).to.eq(6015);
+      }
+    }
+    expect(missingSummaryThrew).to.eq(true);
+
+    await (program as any).methods
+      .withdraw(new BN(100_000))
+      .accountsPartial({
+        user: owner.publicKey,
+        vault: vaultPda,
+        vaultAuthority: vaultAuthorityPda,
+        vaultTokenAccount: vaultAta,
+        userTokenAccount: ownerAta.address,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts([
+        {
+          pubkey: summaryPda,
+          isWritable: false,
+          isSigner: false,
+        },
+      ])
+      .signers([owner])
+      .rpc();
+
+    const vaultAcc = await program.account.collateralVault.fetch(vaultPda);
+    expect(new BN(vaultAcc.availableBalance).toNumber()).to.eq(200_000);
+  });
+
   it("initialize_vault_authority sets governance, programs, and freeze", async () => {
     const user = provider.wallet as anchor.Wallet;
 
@@ -629,19 +843,7 @@ describe("collateral-vault", () => {
       web3.Keypair.generate().publicKey,
     ];
 
-    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_authority")],
-      program.programId
-    );
-
-    await program.methods
-      .initializeVaultAuthority(initialPrograms, false)
-      .accountsPartial({
-        governance: user.publicKey,
-        vaultAuthority: vaultAuthorityPda,
-        systemProgram: web3.SystemProgram.programId,
-      })
-      .rpc();
+    await ensureVaultAuthority(initialPrograms, { cpiEnforced: false });
 
     const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
     expect(va.governance.toBase58()).to.eq(user.publicKey.toBase58());
@@ -652,10 +854,7 @@ describe("collateral-vault", () => {
   it("only governance can update vault authority and add/remove works", async () => {
     const user = provider.wallet as anchor.Wallet;
 
-    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_authority")],
-      program.programId
-    );
+    await ensureVaultAuthority([]);
 
     // Add a new program
     const newProgram = web3.Keypair.generate().publicKey;
@@ -722,10 +921,8 @@ describe("collateral-vault", () => {
 
   it("set_freeze_flag toggles freeze on vault authority", async () => {
     const user = provider.wallet as anchor.Wallet;
-    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_authority")],
-      program.programId
-    );
+
+    await ensureVaultAuthority([]);
 
     await (program as any).methods
       .setFreezeFlag(true)
@@ -754,43 +951,7 @@ describe("collateral-vault", () => {
     const user = provider.wallet as anchor.Wallet;
     const connection = provider.connection;
 
-    // Authorized caller program (simulated)
-    const authorizedCaller = web3.Keypair.generate().publicKey;
-
-    // Compute VaultAuthority PDA
-    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_authority")],
-      program.programId
-    );
-
-    // Initialize vault authority with our authorized caller, or update existing
-    let initTried = false;
-    try {
-      await program.methods
-        .initializeVaultAuthority([authorizedCaller], false)
-        .accountsPartial({
-          governance: user.publicKey,
-          vaultAuthority: vaultAuthorityPda,
-          systemProgram: web3.SystemProgram.programId,
-        })
-        .rpc();
-      initTried = true;
-    } catch (_) {
-      // If already initialized, ensure our caller is present
-      const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
-      const has = (va.authorizedPrograms as web3.PublicKey[]).some(
-        (p) => p.toBase58() === authorizedCaller.toBase58()
-      );
-      if (!has) {
-        await (program as any).methods
-          .addAuthorizedProgram(authorizedCaller)
-          .accountsPartial({
-            governance: user.publicKey,
-            vaultAuthority: vaultAuthorityPda,
-          })
-          .rpc();
-      }
-    }
+    await ensureVaultAuthority([mockProgram.programId]);
 
     // Fresh owner and mint
     const owner = web3.Keypair.generate();
@@ -856,13 +1017,18 @@ describe("collateral-vault", () => {
       .signers([owner])
       .rpc();
 
-    // Lock 0.2 via accounting
-    await (program as any).methods
-      .lockCollateral(new BN(200_000))
-      .accountsPartial({
-        callerProgram: authorizedCaller,
+    const summaryPda = await ensurePositionSummary(vaultPda, owner);
+
+    // Lock 0.2 via CPI
+    await mockProgram.methods
+      .openPosition(new BN(200_000))
+      .accounts({
+        callerProgram: mockProgram.programId,
         vaultAuthority: vaultAuthorityPda,
+        instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         vault: vaultPda,
+        positionSummary: summaryPda,
+        collateralVaultProgram: program.programId,
       })
       .rpc();
 
@@ -871,13 +1037,16 @@ describe("collateral-vault", () => {
     expect(new BN(vaultAcc.availableBalance).toNumber()).to.eq(300_000);
     expect(new BN(vaultAcc.totalBalance).toNumber()).to.eq(500_000);
 
-    // Unlock 0.1
-    await (program as any).methods
-      .unlockCollateral(new BN(100_000))
-      .accountsPartial({
-        callerProgram: authorizedCaller,
+    // Unlock 0.1 via CPI
+    await mockProgram.methods
+      .closePosition(new BN(100_000))
+      .accounts({
+        callerProgram: mockProgram.programId,
         vaultAuthority: vaultAuthorityPda,
+        instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         vault: vaultPda,
+        positionSummary: summaryPda,
+        collateralVaultProgram: program.programId,
       })
       .rpc();
 
@@ -893,39 +1062,7 @@ describe("collateral-vault", () => {
     // Authorized list is empty; we'll try to lock with a random program key
     const rogueCaller = web3.Keypair.generate().publicKey;
 
-    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_authority")],
-      program.programId
-    );
-
-    // Ensure VA exists with empty authorized list: init or clear existing
-    let exists = false;
-    try {
-      await program.account.vaultAuthority.fetch(vaultAuthorityPda);
-      exists = true;
-    } catch (_) {}
-
-    if (!exists) {
-      await program.methods
-        .initializeVaultAuthority([], false)
-        .accountsPartial({
-          governance: user.publicKey,
-          vaultAuthority: vaultAuthorityPda,
-          systemProgram: web3.SystemProgram.programId,
-        })
-        .rpc();
-    } else {
-      const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
-      for (const p of va.authorizedPrograms as web3.PublicKey[]) {
-        await (program as any).methods
-          .removeAuthorizedProgram(p)
-          .accountsPartial({
-            governance: user.publicKey,
-            vaultAuthority: vaultAuthorityPda,
-          })
-          .rpc();
-      }
-    }
+    await ensureVaultAuthority([]);
 
     // Fresh owner/vault (no deposit needed to assert UnauthorizedProgram first)
     const owner = web3.Keypair.generate();
@@ -970,6 +1107,7 @@ describe("collateral-vault", () => {
         .accountsPartial({
           callerProgram: rogueCaller,
           vaultAuthority: vaultAuthorityPda,
+          instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
           vault: vaultPda,
         })
         .rpc();
@@ -983,38 +1121,7 @@ describe("collateral-vault", () => {
     const user = provider.wallet as anchor.Wallet;
     const connection = provider.connection;
 
-    // Authorized caller program (simulated)
-    const authorizedCaller = web3.Keypair.generate().publicKey;
-
-    // Ensure VaultAuthority exists and includes authorized caller
-    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_authority")],
-      program.programId
-    );
-    try {
-      await program.methods
-        .initializeVaultAuthority([authorizedCaller], false)
-        .accountsPartial({
-          governance: user.publicKey,
-          vaultAuthority: vaultAuthorityPda,
-          systemProgram: web3.SystemProgram.programId,
-        })
-        .rpc();
-    } catch (_) {
-      const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
-      const present = (va.authorizedPrograms as web3.PublicKey[]).some(
-        (p) => p.toBase58() === authorizedCaller.toBase58()
-      );
-      if (!present) {
-        await (program as any).methods
-          .addAuthorizedProgram(authorizedCaller)
-          .accountsPartial({
-            governance: user.publicKey,
-            vaultAuthority: vaultAuthorityPda,
-          })
-          .rpc();
-      }
-    }
+    await ensureVaultAuthority([mockProgram.programId]);
 
     // Create mint and two users
     const alice = web3.Keypair.generate();
@@ -1108,16 +1215,18 @@ describe("collateral-vault", () => {
       .rpc();
 
     // Transfer 0.2 from Alice's vault to Bob's vault via authorized caller
-    await (program as any).methods
-      .transferCollateral(new BN(200_000))
-      .accountsPartial({
-        callerProgram: authorizedCaller,
+    await mockProgram.methods
+      .rebalanceCollateral(new BN(200_000))
+      .accounts({
+        callerProgram: mockProgram.programId,
         vaultAuthority: vaultAuthorityPda,
+        instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         fromVault: aliceVaultPda,
         toVault: bobVaultPda,
         fromVaultTokenAccount: aliceVaultAta,
         toVaultTokenAccount: bobVaultAta,
         tokenProgram: TOKEN_PROGRAM_ID,
+        collateralVaultProgram: program.programId,
       })
       .rpc();
 
@@ -1145,38 +1254,7 @@ describe("collateral-vault", () => {
     // Rogue caller not in allowlist
     const rogueCaller = web3.Keypair.generate().publicKey;
 
-    const [vaultAuthorityPda] = web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_authority")],
-      program.programId
-    );
-
-    // Ensure VA exists and has empty allowed list
-    let exists = false;
-    try {
-      await program.account.vaultAuthority.fetch(vaultAuthorityPda);
-      exists = true;
-    } catch (_) {}
-    if (!exists) {
-      await program.methods
-        .initializeVaultAuthority([], false)
-        .accountsPartial({
-          governance: user.publicKey,
-          vaultAuthority: vaultAuthorityPda,
-          systemProgram: web3.SystemProgram.programId,
-        })
-        .rpc();
-    } else {
-      const va = await program.account.vaultAuthority.fetch(vaultAuthorityPda);
-      for (const p of va.authorizedPrograms as web3.PublicKey[]) {
-        await (program as any).methods
-          .removeAuthorizedProgram(p)
-          .accountsPartial({
-            governance: user.publicKey,
-            vaultAuthority: vaultAuthorityPda,
-          })
-          .rpc();
-      }
-    }
+    await ensureVaultAuthority([]);
 
     // Setup minimal two vaults and mint
     const alice = web3.Keypair.generate();
@@ -1268,16 +1346,18 @@ describe("collateral-vault", () => {
 
     let threw = false;
     try {
-      await (program as any).methods
-        .transferCollateral(new BN(10_000))
-        .accountsPartial({
+      await mockProgram.methods
+        .rebalanceCollateral(new BN(10_000))
+        .accounts({
           callerProgram: rogueCaller,
           vaultAuthority: vaultAuthorityPda,
+          instructions: web3.SYSVAR_INSTRUCTIONS_PUBKEY,
           fromVault: aliceVaultPda,
           toVault: bobVaultPda,
           fromVaultTokenAccount: aliceVaultAta,
           toVaultTokenAccount: bobVaultAta,
           tokenProgram: TOKEN_PROGRAM_ID,
+          collateralVaultProgram: program.programId,
         })
         .rpc();
     } catch (e) {

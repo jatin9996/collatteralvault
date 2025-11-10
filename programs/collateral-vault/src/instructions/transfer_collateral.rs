@@ -15,19 +15,13 @@ pub fn handler(ctx: Context<TransferCollateral>, amount: u64) -> Result<()> {
 	// Optional global freeze
 	require!(!va.freeze, ErrorCode::Frozen);
 
-    // Authorization: caller program must be in the allowlist
-    let caller = ctx.accounts.caller_program.key();
+    let actual_caller = resolve_caller_program(&ctx.accounts.instructions)?;
     require!(
-        va.authorized_programs.iter().any(|p| *p == caller),
+        va.authorized_programs.iter().any(|p| *p == actual_caller),
         ErrorCode::UnauthorizedProgram
     );
-    // Optional CPI-origin enforcement
     if va.cpi_enforced {
-        let ix_ai = ctx.accounts.instructions.to_account_info();
-        let idx = sysvar_instructions::load_current_index_checked(&ix_ai)?;
-        require!(idx > 0, ErrorCode::UnauthorizedProgram);
-        let prev = sysvar_instructions::load_instruction_at_checked((idx - 1) as usize, &ix_ai)?;
-        require_keys_eq!(prev.program_id, caller, ErrorCode::UnauthorizedProgram);
+        require_keys_eq!(ctx.accounts.caller_program.key(), actual_caller, ErrorCode::UnauthorizedProgram);
     }
 
 	let from_vault = &mut ctx.accounts.from_vault;
@@ -181,6 +175,13 @@ pub struct TransferCollateral<'info> {
 	pub to_vault_token_account: Account<'info, TokenAccount>,
 
 	pub token_program: Program<'info, Token>,
+}
+
+fn resolve_caller_program(instructions: &AccountInfo<'_>) -> Result<Pubkey> {
+    let current_index = sysvar_instructions::load_current_index_checked(instructions)?;
+    require!(current_index > 0, ErrorCode::UnauthorizedProgram);
+    let caller_ix = sysvar_instructions::load_instruction_at_checked((current_index - 1) as usize, instructions)?;
+    Ok(caller_ix.program_id)
 }
 
 
