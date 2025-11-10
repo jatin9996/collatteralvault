@@ -7,29 +7,8 @@ pub mod state;
 pub mod instructions;
 pub mod types;
 
+#[allow(ambiguous_glob_reexports, hidden_glob_reexports)]
 pub use instructions::*;
-
-// Bring Accounts structs into scope for #[program] visibility.
-use authority::{InitializeVaultAuthority, UpdateVaultAuthority};
-use close_vault::CloseVault;
-use compound_yield::CompoundYield;
-use delegation::UpdateDelegates;
-use deposit::Deposit;
-use emergency_withdraw::EmergencyWithdraw;
-use get_vault_info::GetVaultInfo;
-use initialize_vault::InitializeVault;
-use lock_collateral::LockCollateral;
-use multisig::SetVaultMultisig;
-use release_timelocks::ReleaseTimelocks;
-use request_withdraw::RequestWithdraw;
-use schedule_timelock::ScheduleTimelock;
-use transfer_collateral::TransferCollateral;
-use unlock_collateral::UnlockCollateral;
-use update_usdt_mint::UpdateUsdtMint;
-use withdraw::Withdraw;
-use withdraw_policy::UpdatePolicy;
-use yield_deposit::YieldDeposit;
-use yield_withdraw::YieldWithdraw;
 
 
 
