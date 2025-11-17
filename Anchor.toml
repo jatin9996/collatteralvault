@@ -7,7 +7,11 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-collateral_vault = "Af5t3U1fEgZQGkQ92uUANSvDRd4qNTBKTQ5tTs7n8g4q"
+collateral_vault = "5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT"
+mock_position_manager = "EMHew6227FX9PUhDGKwc8FHsEASZf5Fd4GWryuEXokT"
+
+[programs.devnet]
+collateral_vault = "5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT"
 mock_position_manager = "EMHew6227FX9PUhDGKwc8FHsEASZf5Fd4GWryuEXokT"
 
 [registry]

@@ -12,7 +12,7 @@ pub use instructions::*;
 
 
 
-declare_id!("Af5t3U1fEgZQGkQ92uUANSvDRd4qNTBKTQ5tTs7n8g4q");
+declare_id!("5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT");
 
 #[program]
 pub mod collateral_vault {
