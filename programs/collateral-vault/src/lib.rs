@@ -1,16 +1,32 @@
+//! # Collateral Vault Program
+//!
+//! A secure Solana smart contract for managing collateral deposits, withdrawals,
+//! and yield generation for USDT tokens.
+//!
+//! ## Features
+//!
+//! - Secure deposit and withdrawal operations
+//! - Multisig support for enhanced security
+//! - Timelock mechanisms for scheduled unlocks
+//! - Rate limiting and withdrawal policies
+//! - Yield protocol integration
+//! - Cross-program invocation (CPI) support
+//!
+//! ## Program ID
+//!
+//! - Testnet: `5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT`
+
 use anchor_lang::prelude::*;
 
 pub mod constants;
 pub mod error;
 pub mod events;
-pub mod state;
 pub mod instructions;
+pub mod state;
 pub mod types;
 
 #[allow(ambiguous_glob_reexports, hidden_glob_reexports)]
 pub use instructions::*;
-
-
 
 declare_id!("5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT");
 
@@ -18,6 +34,7 @@ declare_id!("5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT");
 pub mod collateral_vault {
     use super::*;
 
+    /// Initialize the program (no-op, required by Anchor)
     pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
         Ok(())
     }
@@ -138,6 +155,7 @@ pub mod collateral_vault {
         instructions::close_vault::handler(ctx)
     }
 
+    /// Get vault information (read-only, returns account data via Anchor)
     pub fn get_vault_info(_ctx: Context<GetVaultInfo>) -> Result<()> {
         Ok(())
     }
@@ -161,9 +179,10 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, anchor_lang::system_program::System>,
 }
 
-// ----------------------------
-// Unit tests (serialization roundtrip)
-// ----------------------------
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;

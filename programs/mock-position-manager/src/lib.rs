@@ -8,7 +8,8 @@ use collateral_vault::types::PositionSummary;
 pub const POSITION_SUMMARY_SEED: &[u8] = b"position_summary";
 
 // IMPORTANT: Program id must match Anchor.toml (programs.localnet.mock_position_manager)
-declare_id!("EMHew6227FX9PUhDGKwc8FHsEASZf5Fd4GWryuEXokT");
+// Updated to match the actual deployed program ID on testnet
+declare_id!("9kL3B4VKXhF6nZwW3yQZUJnSfgfR1ZDmrgiStQaQkx9n");
 
 #[program]
 pub mod mock_position_manager {

@@ -14,6 +14,10 @@ mock_position_manager = "EMHew6227FX9PUhDGKwc8FHsEASZf5Fd4GWryuEXokT"
 collateral_vault = "5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT"
 mock_position_manager = "EMHew6227FX9PUhDGKwc8FHsEASZf5Fd4GWryuEXokT"
 
+[programs.testnet]
+collateral_vault = "5qgA2qcz6zXYiJJkomV1LJv8UhKueyNsqeCWJd6jC9pT"
+mock_position_manager = "9kL3B4VKXhF6nZwW3yQZUJnSfgfR1ZDmrgiStQaQkx9n"
+
 [registry]
 url = "https://api.apr.dev"
 
@@ -28,3 +32,4 @@ test = "anchor test"
 startup_wait = 80000
 shutdown_wait = 2000
 upgradeable = false
+skip_local_validator = false

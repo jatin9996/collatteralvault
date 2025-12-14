@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      
+      - name: Install Solana CLI
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install Anchor
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install 0.32.1
+          avm use 0.32.1
+      
+      - name: Install dependencies
+        run: yarn install
+      
+      - name: Check formatting
+        run: yarn lint
+      
+      - name: Build
+        run: anchor build
+      
+      - name: Run tests
+        run: anchor test --skip-local-validator
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      
+      - name: Check formatting
+        run: cargo fmt -- --check
+      
+      - name: Clippy
+        run: cargo clippy -- -D warnings
