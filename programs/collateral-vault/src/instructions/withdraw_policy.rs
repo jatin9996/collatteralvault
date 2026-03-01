@@ -2,18 +2,28 @@ use anchor_lang::prelude::*;
 
 use crate::constants::VAULT_SEED;
 use crate::error::ErrorCode;
-use crate::events::{WithdrawMinDelaySetEvent, WithdrawRateLimitSetEvent, WithdrawWhitelistUpdatedEvent};
+use crate::events::{
+    WithdrawMinDelaySetEvent, WithdrawRateLimitSetEvent, WithdrawWhitelistUpdatedEvent,
+};
 use crate::state::CollateralVault;
 
 pub fn set_min_delay(ctx: Context<UpdatePolicy>, seconds: i64) -> Result<()> {
     require!(seconds >= 0, ErrorCode::InvalidAmount);
     let vault = &mut ctx.accounts.vault;
     vault.min_withdraw_delay_seconds = seconds;
-    emit!(WithdrawMinDelaySetEvent { vault: vault.key(), owner: vault.owner, seconds });
+    emit!(WithdrawMinDelaySetEvent {
+        vault: vault.key(),
+        owner: vault.owner,
+        seconds
+    });
     Ok(())
 }
 
-pub fn set_rate_limit(ctx: Context<UpdatePolicy>, window_seconds: u32, max_amount: u64) -> Result<()> {
+pub fn set_rate_limit(
+    ctx: Context<UpdatePolicy>,
+    window_seconds: u32,
+    max_amount: u64,
+) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
     vault.rate_window_seconds = window_seconds;
     vault.rate_limit_amount = max_amount;
@@ -31,9 +41,18 @@ pub fn set_rate_limit(ctx: Context<UpdatePolicy>, window_seconds: u32, max_amoun
 
 pub fn add_whitelist(ctx: Context<UpdatePolicy>, address: Pubkey) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
-    require!(!vault.withdraw_whitelist.iter().any(|a| *a == address), ErrorCode::AlreadyExists);
+    require!(
+        !vault.withdraw_whitelist.iter().any(|a| *a == address),
+        ErrorCode::AlreadyExists
+    );
     vault.withdraw_whitelist.push(address);
-    emit!(WithdrawWhitelistUpdatedEvent { vault: vault.key(), owner: vault.owner, address, added: true, new_len: vault.withdraw_whitelist.len() as u32 });
+    emit!(WithdrawWhitelistUpdatedEvent {
+        vault: vault.key(),
+        owner: vault.owner,
+        address,
+        added: true,
+        new_len: vault.withdraw_whitelist.len() as u32
+    });
     Ok(())
 }
 
@@ -41,7 +60,13 @@ pub fn remove_whitelist(ctx: Context<UpdatePolicy>, address: Pubkey) -> Result<(
     let vault = &mut ctx.accounts.vault;
     if let Some(i) = vault.withdraw_whitelist.iter().position(|a| *a == address) {
         vault.withdraw_whitelist.swap_remove(i);
-        emit!(WithdrawWhitelistUpdatedEvent { vault: vault.key(), owner: vault.owner, address, added: false, new_len: vault.withdraw_whitelist.len() as u32 });
+        emit!(WithdrawWhitelistUpdatedEvent {
+            vault: vault.key(),
+            owner: vault.owner,
+            address,
+            added: false,
+            new_len: vault.withdraw_whitelist.len() as u32
+        });
         Ok(())
     } else {
         err!(ErrorCode::NotFound)
@@ -61,5 +86,3 @@ pub struct UpdatePolicy<'info> {
     )]
     pub vault: Account<'info, CollateralVault>,
 }
-
-

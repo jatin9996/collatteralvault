@@ -12,7 +12,10 @@ pub fn handler(ctx: Context<CloseVault>) -> Result<()> {
     // Must be empty
     require!(vault.total_balance == 0, ErrorCode::NonZeroBalance);
     require!(vault.locked_balance == 0, ErrorCode::NonZeroBalance);
-    require!(ctx.accounts.vault_token_account.amount == 0, ErrorCode::NonZeroBalance);
+    require!(
+        ctx.accounts.vault_token_account.amount == 0,
+        ErrorCode::NonZeroBalance
+    );
 
     // Close the vault's ATA (authority is vault PDA)
     let user_key = ctx.accounts.user.key();
@@ -62,5 +65,3 @@ pub struct CloseVault<'info> {
 
     pub token_program: Program<'info, Token>,
 }
-
-

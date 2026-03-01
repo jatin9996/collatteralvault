@@ -25,9 +25,8 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         ctx.remaining_accounts.len() >= authorized_programs.len(),
         ErrorCode::PositionSummaryMissing
     );
-    let (summary_accounts, signer_accounts) = ctx
-        .remaining_accounts
-        .split_at(authorized_programs.len());
+    let (summary_accounts, signer_accounts) =
+        ctx.remaining_accounts.split_at(authorized_programs.len());
 
     // Authorization: single-owner or multisig
     let threshold = ctx.accounts.vault.multisig_threshold;
@@ -42,7 +41,10 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         // multisig: require at least threshold unique configured signers to have signed
         let allowed: &Vec<Pubkey> = &ctx.accounts.vault.multisig_signers;
         require!(!allowed.is_empty(), ErrorCode::Unauthorized);
-        require!((threshold as usize) <= allowed.len(), ErrorCode::Unauthorized);
+        require!(
+            (threshold as usize) <= allowed.len(),
+            ErrorCode::Unauthorized
+        );
 
         let mut approved: u8 = 0;
         let mut seen: std::collections::BTreeSet<Pubkey> = std::collections::BTreeSet::new();
@@ -54,12 +56,18 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         }
 
         for ai in signer_accounts.iter() {
-            if !ai.is_signer { continue; }
-            if seen.contains(&ai.key()) { continue; }
+            if !ai.is_signer {
+                continue;
+            }
+            if seen.contains(&ai.key()) {
+                continue;
+            }
             if allowed.iter().any(|k| *k == ai.key()) {
                 approved = approved.saturating_add(1);
                 let _ = seen.insert(ai.key());
-                if approved >= threshold { break; }
+                if approved >= threshold {
+                    break;
+                }
             }
         }
         require!(approved >= threshold, ErrorCode::Unauthorized);
@@ -70,7 +78,8 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let vault_ref = &mut ctx.accounts.vault;
         let mut released_total: u64 = 0;
-        let mut remaining: Vec<crate::types::TimelockEntry> = Vec::with_capacity(vault_ref.timelocks.len());
+        let mut remaining: Vec<crate::types::TimelockEntry> =
+            Vec::with_capacity(vault_ref.timelocks.len());
         for e in vault_ref.timelocks.iter() {
             if e.unlock_time <= now {
                 released_total = released_total
@@ -101,14 +110,21 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
                 authorized_programs.iter().any(|p| *p == owner_program),
                 ErrorCode::PositionSummaryInvalid
             );
-            require!(!summary_ai.data_is_empty(), ErrorCode::PositionSummaryInvalid);
+            require!(
+                !summary_ai.data_is_empty(),
+                ErrorCode::PositionSummaryInvalid
+            );
             let data = summary_ai.try_borrow_data()?;
             require!(data.len() >= 8, ErrorCode::PositionSummaryInvalid);
             let summary = PositionSummary::try_from_slice(&data[8..])
                 .map_err(|_| ErrorCode::PositionSummaryInvalid)?;
             drop(data);
             require_keys_eq!(summary.vault, vault_key, ErrorCode::PositionSummaryInvalid);
-            require_keys_eq!(summary.owner, vault_owner, ErrorCode::PositionSummaryInvalid);
+            require_keys_eq!(
+                summary.owner,
+                vault_owner,
+                ErrorCode::PositionSummaryInvalid
+            );
             require!(summary.open_positions == 0, ErrorCode::OpenPositionsExist);
             require!(summary.locked_amount == 0, ErrorCode::OpenPositionsExist);
             covered.insert(owner_program);
@@ -122,12 +138,16 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     // Business invariants
     require!(available_balance >= amount, ErrorCode::InsufficientFunds);
     // Enforce no-open-positions rule (no locked funds)
-    require!(ctx.accounts.vault.locked_balance == 0, ErrorCode::OpenPositionsExist);
+    require!(
+        ctx.accounts.vault.locked_balance == 0,
+        ErrorCode::OpenPositionsExist
+    );
     // Recipient must be owner or on whitelist
     {
         let recipient = user_token_account.owner;
         let is_owner = recipient == ctx.accounts.owner.key();
-        let is_whitelisted = ctx.accounts
+        let is_whitelisted = ctx
+            .accounts
             .vault
             .withdraw_whitelist
             .iter()
@@ -136,11 +156,15 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     }
     require_keys_eq!(user_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
     require_keys_eq!(vault_token_account.mint, usdt_mint, ErrorCode::Unauthorized);
-    require_keys_eq!(vault_token_account.owner, vault_key, ErrorCode::Unauthorized);
+    require_keys_eq!(
+        vault_token_account.owner,
+        vault_key,
+        ErrorCode::Unauthorized
+    );
 
     // Explicitly assert token accounts are owned by the token program
     require_keys_eq!(
-		*ctx.accounts.user_token_account.to_account_info().owner,
+        *ctx.accounts.user_token_account.to_account_info().owner,
         ctx.accounts.token_program.key(),
         ErrorCode::InvalidTokenProgramOwner
     );
@@ -152,13 +176,16 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
             let mut matured_total: u64 = 0;
             for e in vault_ref.pending_withdrawals.iter() {
                 if e.executable_at <= now {
-                    matured_total = matured_total.checked_add(e.amount).ok_or(ErrorCode::Overflow)?;
+                    matured_total = matured_total
+                        .checked_add(e.amount)
+                        .ok_or(ErrorCode::Overflow)?;
                 }
             }
             require!(matured_total >= amount, ErrorCode::Unauthorized);
 
             // consume from matured entries
-            let mut remaining: Vec<crate::types::PendingWithdrawalEntry> = Vec::with_capacity(vault_ref.pending_withdrawals.len());
+            let mut remaining: Vec<crate::types::PendingWithdrawalEntry> =
+                Vec::with_capacity(vault_ref.pending_withdrawals.len());
             let mut to_consume = amount;
             for e in vault_ref.pending_withdrawals.iter() {
                 if to_consume == 0 {
@@ -167,12 +194,21 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
                 }
                 if e.executable_at <= now {
                     if e.amount <= to_consume {
-                        to_consume = to_consume.checked_sub(e.amount).ok_or(ErrorCode::Overflow)?;
+                        to_consume = to_consume
+                            .checked_sub(e.amount)
+                            .ok_or(ErrorCode::Overflow)?;
                         // drop this entry fully
                     } else {
                         // partially consume
-                        let leftover = e.amount.checked_sub(to_consume).ok_or(ErrorCode::Overflow)?;
-                        remaining.push(crate::types::PendingWithdrawalEntry { amount: leftover, requested_at: e.requested_at, executable_at: e.executable_at });
+                        let leftover = e
+                            .amount
+                            .checked_sub(to_consume)
+                            .ok_or(ErrorCode::Overflow)?;
+                        remaining.push(crate::types::PendingWithdrawalEntry {
+                            amount: leftover,
+                            requested_at: e.requested_at,
+                            executable_at: e.executable_at,
+                        });
                         to_consume = 0;
                     }
                 } else {
@@ -189,24 +225,36 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         let vault_ref = &mut ctx.accounts.vault;
         if vault_ref.rate_window_seconds > 0 && vault_ref.rate_limit_amount > 0 {
             let window = vault_ref.rate_window_seconds as i64;
-            if vault_ref.last_withdrawal_window_start == 0 || now >= vault_ref.last_withdrawal_window_start + window {
+            if vault_ref.last_withdrawal_window_start == 0
+                || now >= vault_ref.last_withdrawal_window_start + window
+            {
                 vault_ref.last_withdrawal_window_start = now;
                 vault_ref.withdrawn_in_window = 0;
             }
-            let new_used = vault_ref.withdrawn_in_window.checked_add(amount).ok_or(ErrorCode::Overflow)?;
-            require!(new_used <= vault_ref.rate_limit_amount, ErrorCode::Unauthorized);
+            let new_used = vault_ref
+                .withdrawn_in_window
+                .checked_add(amount)
+                .ok_or(ErrorCode::Overflow)?;
+            require!(
+                new_used <= vault_ref.rate_limit_amount,
+                ErrorCode::Unauthorized
+            );
             vault_ref.withdrawn_in_window = new_used;
         }
     }
 
     require_keys_eq!(
-		*ctx.accounts.vault_token_account.to_account_info().owner,
+        *ctx.accounts.vault_token_account.to_account_info().owner,
         ctx.accounts.token_program.key(),
         ErrorCode::InvalidTokenProgramOwner
     );
 
     // Seeds for PDA signer: ["vault", vault.owner]
-    let signer_seeds: &[&[u8]] = &[crate::constants::VAULT_SEED, vault_owner.as_ref(), &[vault_bump]];
+    let signer_seeds: &[&[u8]] = &[
+        crate::constants::VAULT_SEED,
+        vault_owner.as_ref(),
+        &[vault_bump],
+    ];
     let signer: &[&[&[u8]]] = &[signer_seeds];
 
     // CPI: transfer from vault ATA to user's ATA, signed by vault PDA
@@ -288,5 +336,3 @@ pub struct Withdraw<'info> {
 
     pub token_program: Program<'info, Token>,
 }
-
-

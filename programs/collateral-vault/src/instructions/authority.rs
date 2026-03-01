@@ -33,15 +33,18 @@ pub fn initialize_vault_authority(
     Ok(())
 }
 
-pub fn add_authorized_program(
-    ctx: Context<UpdateVaultAuthority>,
-    program: Pubkey,
-) -> Result<()> {
+pub fn add_authorized_program(ctx: Context<UpdateVaultAuthority>, program: Pubkey) -> Result<()> {
     let va = &mut ctx.accounts.vault_authority;
     // Prevent duplicates
-    require!(!va.authorized_programs.iter().any(|p| *p == program), ErrorCode::AlreadyExists);
+    require!(
+        !va.authorized_programs.iter().any(|p| *p == program),
+        ErrorCode::AlreadyExists
+    );
     // Enforce capacity bound
-    require!(va.authorized_programs.len() < MAX_AUTHORIZED_PROGRAMS, ErrorCode::Overflow);
+    require!(
+        va.authorized_programs.len() < MAX_AUTHORIZED_PROGRAMS,
+        ErrorCode::Overflow
+    );
     va.authorized_programs.push(program);
     emit!(AuthorizedProgramAddedEvent { program });
     Ok(())
@@ -61,41 +64,35 @@ pub fn remove_authorized_program(
     }
 }
 
-pub fn set_freeze_flag(
-    ctx: Context<UpdateVaultAuthority>,
-    freeze: bool,
-) -> Result<()> {
+pub fn set_freeze_flag(ctx: Context<UpdateVaultAuthority>, freeze: bool) -> Result<()> {
     let va = &mut ctx.accounts.vault_authority;
     va.freeze = freeze;
     emit!(FreezeFlagSetEvent { freeze });
     Ok(())
 }
 
-pub fn set_cpi_enforced(
-    ctx: Context<UpdateVaultAuthority>,
-    cpi_enforced: bool,
-) -> Result<()> {
+pub fn set_cpi_enforced(ctx: Context<UpdateVaultAuthority>, cpi_enforced: bool) -> Result<()> {
     let va = &mut ctx.accounts.vault_authority;
     va.cpi_enforced = cpi_enforced;
     emit!(CpiEnforcedSetEvent { cpi_enforced });
     Ok(())
 }
 
-pub fn add_yield_program(
-    ctx: Context<UpdateVaultAuthority>,
-    program: Pubkey,
-) -> Result<()> {
+pub fn add_yield_program(ctx: Context<UpdateVaultAuthority>, program: Pubkey) -> Result<()> {
     let va = &mut ctx.accounts.vault_authority;
-    require!(!va.yield_whitelist.iter().any(|p| *p == program), ErrorCode::AlreadyExists);
-    require!(va.yield_whitelist.len() < MAX_AUTHORIZED_PROGRAMS, ErrorCode::Overflow);
+    require!(
+        !va.yield_whitelist.iter().any(|p| *p == program),
+        ErrorCode::AlreadyExists
+    );
+    require!(
+        va.yield_whitelist.len() < MAX_AUTHORIZED_PROGRAMS,
+        ErrorCode::Overflow
+    );
     va.yield_whitelist.push(program);
     Ok(())
 }
 
-pub fn remove_yield_program(
-    ctx: Context<UpdateVaultAuthority>,
-    program: Pubkey,
-) -> Result<()> {
+pub fn remove_yield_program(ctx: Context<UpdateVaultAuthority>, program: Pubkey) -> Result<()> {
     let va = &mut ctx.accounts.vault_authority;
     if let Some(index) = va.yield_whitelist.iter().position(|p| *p == program) {
         va.yield_whitelist.swap_remove(index);
@@ -105,10 +102,7 @@ pub fn remove_yield_program(
     }
 }
 
-pub fn set_risk_level(
-    ctx: Context<UpdateVaultAuthority>,
-    risk_level: u8,
-) -> Result<()> {
+pub fn set_risk_level(ctx: Context<UpdateVaultAuthority>, risk_level: u8) -> Result<()> {
     let va = &mut ctx.accounts.vault_authority;
     va.risk_level = risk_level;
     Ok(())
@@ -145,5 +139,3 @@ pub struct UpdateVaultAuthority<'info> {
     )]
     pub vault_authority: Account<'info, VaultAuthority>,
 }
-
-

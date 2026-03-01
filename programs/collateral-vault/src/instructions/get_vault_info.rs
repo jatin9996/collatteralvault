@@ -11,5 +11,3 @@ pub fn handler(_ctx: Context<GetVaultInfo>) -> Result<()> {
 pub struct GetVaultInfo<'info> {
     pub vault: Account<'info, CollateralVault>,
 }
-
-

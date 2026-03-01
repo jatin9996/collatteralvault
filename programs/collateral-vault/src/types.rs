@@ -27,7 +27,6 @@ pub struct TimelockEntry {
     pub unlock_time: i64,
 }
 
-
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
 pub struct PendingWithdrawalEntry {
     pub amount: u64,
@@ -47,5 +46,3 @@ pub struct PositionSummary {
 impl PositionSummary {
     pub const LEN: usize = 32 + 32 + 8 + 8 + 8;
 }
-
-

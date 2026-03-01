@@ -1,4 +1,4 @@
-# Collateral Vault - Solana Smart Contract
+cd G# Collateral Vault - Solana Smart Contract
 
 A secure, production-ready Solana smart contract for managing collateral deposits, withdrawals, and yield generation for USDT tokens.
 
@@ -73,20 +73,25 @@ collateral-vault/
 ├── tests/                     # Integration tests
 ├── scripts/                   # Deployment and utility scripts
 ├── docs/                      # Documentation
-│   ├── ARCHITECTURE.md
-│   ├── DEPLOYMENT_GUIDE.md
-│   ├── SPL_TOKEN_INTEGRATION.md
-│   └── SECURITY_ANALYSIS.md
+│   ├── ARCHITECTURE.md        # System architecture (client-facing)
+│   ├── FLOW.md                # User & CPI flows (client-facing)
+│   └── ...
 └── Anchor.toml                 # Anchor configuration
 ```
 
 ## Documentation
 
-- **[Architecture](./docs/ARCHITECTURE.md)**: System architecture and design
-- **[Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)**: Step-by-step deployment instructions
-- **[SPL Token Integration](./docs/SPL_TOKEN_INTEGRATION.md)**: Token integration guide
-- **[Security Analysis](./docs/SECURITY_ANALYSIS.md)**: Security controls and analysis
-- **[API Documentation](../cvmsback/docs/API_DOCUMENTATION.md)**: Backend API reference
+**Client-facing (architecture & flows):**
+
+- **[Architecture](./docs/ARCHITECTURE.md)**: System overview, components, PDAs, security model
+- **[Flow](./docs/FLOW.md)**: Step-by-step flows (setup, deposit, lock/unlock, withdraw, transfer)
+
+**Other:**
+
+- **[Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)**: Step-by-step deployment instructions (if present)
+- **[SPL Token Integration](./docs/SPL_TOKEN_INTEGRATION.md)**: Token integration guide (if present)
+- **[Security Analysis](./docs/SECURITY_ANALYSIS.md)**: Security controls and analysis (if present)
+- **[API Documentation](../cvmsback/docs/API_DOCUMENTATION.md)**: Backend API reference (if present)
 
 ## Program ID
 
@@ -111,9 +116,22 @@ anchor build -- --features testnet
 # Run all tests
 anchor test
 
+# Run requirements flow test (full flow + sample data per product requirements)
+anchor test tests/requirements-flow.spec.ts
+# or: yarn test:requirements-flow
+
 # Run specific test suite
 anchor test tests/integration.spec.ts
+anchor test tests/e2e-demo.spec.ts
 ```
+
+**Requirements flow test** (`tests/requirements-flow.spec.ts`) exercises all core requirements with sample data:
+- Initialize user vault (PDA, USDT ATA, rent-exempt, balance tracking)
+- Deposit collateral (SPL CPI, balance update, min deposit)
+- Withdraw (no open positions, available balance, position summaries when authorized programs exist)
+- Lock/unlock collateral via CPI (mock position manager)
+- Transfer collateral between vaults via CPI (atomic)
+- Full flow: init → deposit → lock → unlock → withdraw → transfer
 
 ### Code Quality
 

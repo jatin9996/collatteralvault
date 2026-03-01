@@ -55,7 +55,11 @@ pub mod collateral_vault {
         instructions::emergency_withdraw::handler(ctx, amount)
     }
 
-    pub fn set_vault_multisig(ctx: Context<SetVaultMultisig>, signers: Vec<Pubkey>, threshold: u8) -> Result<()> {
+    pub fn set_vault_multisig(
+        ctx: Context<SetVaultMultisig>,
+        signers: Vec<Pubkey>,
+        threshold: u8,
+    ) -> Result<()> {
         instructions::multisig::set_vault_multisig(ctx, signers, threshold)
     }
 
@@ -75,7 +79,11 @@ pub mod collateral_vault {
         instructions::transfer_collateral::handler(ctx, amount)
     }
 
-    pub fn schedule_timelock(ctx: Context<ScheduleTimelock>, amount: u64, duration_seconds: i64) -> Result<()> {
+    pub fn schedule_timelock(
+        ctx: Context<ScheduleTimelock>,
+        amount: u64,
+        duration_seconds: i64,
+    ) -> Result<()> {
         instructions::schedule_timelock::handler(ctx, amount, duration_seconds)
     }
 
@@ -91,7 +99,11 @@ pub mod collateral_vault {
         instructions::withdraw_policy::set_min_delay(ctx, seconds)
     }
 
-    pub fn set_withdraw_rate_limit(ctx: Context<UpdatePolicy>, window_seconds: u32, max_amount: u64) -> Result<()> {
+    pub fn set_withdraw_rate_limit(
+        ctx: Context<UpdatePolicy>,
+        window_seconds: u32,
+        max_amount: u64,
+    ) -> Result<()> {
         instructions::withdraw_policy::set_rate_limit(ctx, window_seconds, max_amount)
     }
 
@@ -111,11 +123,17 @@ pub mod collateral_vault {
         instructions::authority::initialize_vault_authority(ctx, authorized_programs, freeze)
     }
 
-    pub fn add_authorized_program(ctx: Context<UpdateVaultAuthority>, program: Pubkey) -> Result<()> {
+    pub fn add_authorized_program(
+        ctx: Context<UpdateVaultAuthority>,
+        program: Pubkey,
+    ) -> Result<()> {
         instructions::authority::add_authorized_program(ctx, program)
     }
 
-    pub fn remove_authorized_program(ctx: Context<UpdateVaultAuthority>, program: Pubkey) -> Result<()> {
+    pub fn remove_authorized_program(
+        ctx: Context<UpdateVaultAuthority>,
+        program: Pubkey,
+    ) -> Result<()> {
         instructions::authority::remove_authorized_program(ctx, program)
     }
 
@@ -186,7 +204,49 @@ pub struct Initialize<'info> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::MIN_DEPOSIT;
     use crate::state::{CollateralVault, VaultAuthority};
+    use crate::types::{PendingWithdrawalEntry, TimelockEntry};
+
+    #[test]
+    fn min_deposit_constant_is_positive() {
+        assert!(MIN_DEPOSIT > 0, "MIN_DEPOSIT must be > 0 for deposit validation");
+        assert_eq!(MIN_DEPOSIT, 1, "MIN_DEPOSIT should be 1 per constants");
+    }
+
+    #[test]
+    fn collateral_vault_len_is_consistent() {
+        assert!(
+            CollateralVault::LEN >= 8 + 32 * 4 + 8 * 14 + 1 * 2 + 64,
+            "CollateralVault::LEN should be at least base size"
+        );
+    }
+
+    #[test]
+    fn timelock_entry_serde_roundtrip() {
+        let e = TimelockEntry {
+            amount: 1000,
+            unlock_time: 2_000_000_000,
+        };
+        let data = e.try_to_vec().unwrap();
+        let back = TimelockEntry::try_from_slice(&data).unwrap();
+        assert_eq!(e.amount, back.amount);
+        assert_eq!(e.unlock_time, back.unlock_time);
+    }
+
+    #[test]
+    fn pending_withdrawal_entry_serde_roundtrip() {
+        let e = PendingWithdrawalEntry {
+            amount: 500,
+            requested_at: 1_700_000_000,
+            executable_at: 1_700_000_100,
+        };
+        let data = e.try_to_vec().unwrap();
+        let back = PendingWithdrawalEntry::try_from_slice(&data).unwrap();
+        assert_eq!(e.amount, back.amount);
+        assert_eq!(e.requested_at, back.requested_at);
+        assert_eq!(e.executable_at, back.executable_at);
+    }
 
     #[test]
     fn collateral_vault_serde_roundtrip() {

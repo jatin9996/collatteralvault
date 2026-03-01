@@ -1,15 +1,31 @@
 use anchor_lang::prelude::*;
 
-use crate::{constants::{VAULT_SEED, MAX_MULTISIG_SIGNERS}, error::ErrorCode, state::CollateralVault};
+use crate::{
+    constants::{MAX_MULTISIG_SIGNERS, VAULT_SEED},
+    error::ErrorCode,
+    state::CollateralVault,
+};
 
-pub fn set_vault_multisig(ctx: Context<SetVaultMultisig>, signers: Vec<Pubkey>, threshold: u8) -> Result<()> {
+pub fn set_vault_multisig(
+    ctx: Context<SetVaultMultisig>,
+    signers: Vec<Pubkey>,
+    threshold: u8,
+) -> Result<()> {
     // Validate inputs
-    require!((threshold as usize) <= signers.len(), ErrorCode::InvalidAmount);
-    require!((signers.len() as usize) <= MAX_MULTISIG_SIGNERS, ErrorCode::InvalidAmount);
+    require!(
+        (threshold as usize) <= signers.len(),
+        ErrorCode::InvalidAmount
+    );
+    require!(
+        (signers.len() as usize) <= MAX_MULTISIG_SIGNERS,
+        ErrorCode::InvalidAmount
+    );
 
     // ensure unique signers
     let mut uniq = std::collections::BTreeSet::new();
-    for k in signers.iter() { uniq.insert(*k); }
+    for k in signers.iter() {
+        uniq.insert(*k);
+    }
     require!(uniq.len() == signers.len(), ErrorCode::InvalidAmount);
 
     let vault = &mut ctx.accounts.vault;
@@ -39,5 +55,3 @@ pub struct SetVaultMultisig<'info> {
     )]
     pub vault: Account<'info, CollateralVault>,
 }
-
-

@@ -27,7 +27,10 @@ pub fn handler(ctx: Context<ScheduleTimelock>, amount: u64, duration_seconds: i6
     } else {
         let allowed: &Vec<Pubkey> = &ctx.accounts.vault.multisig_signers;
         require!(!allowed.is_empty(), ErrorCode::Unauthorized);
-        require!((threshold as usize) <= allowed.len(), ErrorCode::Unauthorized);
+        require!(
+            (threshold as usize) <= allowed.len(),
+            ErrorCode::Unauthorized
+        );
 
         let mut approved: u8 = 0;
         let mut seen: std::collections::BTreeSet<Pubkey> = std::collections::BTreeSet::new();
@@ -36,12 +39,18 @@ pub fn handler(ctx: Context<ScheduleTimelock>, amount: u64, duration_seconds: i6
             let _ = seen.insert(authority.key());
         }
         for ai in ctx.remaining_accounts.iter() {
-            if !ai.is_signer { continue; }
-            if seen.contains(&ai.key()) { continue; }
+            if !ai.is_signer {
+                continue;
+            }
+            if seen.contains(&ai.key()) {
+                continue;
+            }
             if allowed.iter().any(|k| *k == ai.key()) {
                 approved = approved.saturating_add(1);
                 let _ = seen.insert(ai.key());
-                if approved >= threshold { break; }
+                if approved >= threshold {
+                    break;
+                }
             }
         }
         require!(approved >= threshold, ErrorCode::Unauthorized);
@@ -52,14 +61,19 @@ pub fn handler(ctx: Context<ScheduleTimelock>, amount: u64, duration_seconds: i6
 
     // Compute unlock time and push entry
     let now = Clock::get()?.unix_timestamp;
-    let unlock_time = now.checked_add(duration_seconds).ok_or(ErrorCode::Overflow)?;
+    let unlock_time = now
+        .checked_add(duration_seconds)
+        .ok_or(ErrorCode::Overflow)?;
 
     let vault = &mut ctx.accounts.vault;
     vault.available_balance = vault
         .available_balance
         .checked_sub(amount)
         .ok_or(ErrorCode::Overflow)?;
-    vault.timelocks.push(TimelockEntry { amount, unlock_time });
+    vault.timelocks.push(TimelockEntry {
+        amount,
+        unlock_time,
+    });
 
     emit!(TimelockScheduledEvent {
         vault: vault.key(),
@@ -98,5 +112,3 @@ pub struct ScheduleTimelock<'info> {
     )]
     pub vault: Account<'info, CollateralVault>,
 }
-
-

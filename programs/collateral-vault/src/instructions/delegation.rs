@@ -9,7 +9,10 @@ pub fn add_delegate(ctx: Context<UpdateDelegates>, delegate: Pubkey) -> Result<(
     // prevent owner-self as a stored delegate (not harmful, but redundant)
     require!(delegate != vault.owner, ErrorCode::AlreadyExists);
     // prevent duplicates
-    require!(!vault.delegates.iter().any(|d| *d == delegate), ErrorCode::AlreadyExists);
+    require!(
+        !vault.delegates.iter().any(|d| *d == delegate),
+        ErrorCode::AlreadyExists
+    );
     // enforce capacity bound (Anchor will allocate space based on LEN)
     require!(vault.delegates.len() < MAX_DELEGATES, ErrorCode::Overflow);
     vault.delegates.push(delegate);
@@ -39,5 +42,3 @@ pub struct UpdateDelegates<'info> {
     )]
     pub vault: Account<'info, CollateralVault>,
 }
-
-

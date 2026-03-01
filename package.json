@@ -2,7 +2,9 @@
   "license": "ISC",
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
-    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
+    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
+    "test": "anchor test",
+    "test:requirements-flow": "anchor test tests/requirements-flow.spec.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

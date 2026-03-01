@@ -15,5 +15,3 @@ pub const MAX_WITHDRAW_WHITELIST: usize = 32; // max whitelisted recipient addre
 // Minimum deposit amount in smallest units (token decimals apply).
 // Set to 1 to effectively mirror > 0, can be raised by code updates if required.
 pub const MIN_DEPOSIT: u64 = 1;
-
-

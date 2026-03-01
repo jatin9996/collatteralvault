@@ -19,7 +19,10 @@ pub fn handler(ctx: Context<ReleaseTimelocks>) -> Result<()> {
     } else {
         let allowed: &Vec<Pubkey> = &ctx.accounts.vault.multisig_signers;
         require!(!allowed.is_empty(), ErrorCode::Unauthorized);
-        require!((threshold as usize) <= allowed.len(), ErrorCode::Unauthorized);
+        require!(
+            (threshold as usize) <= allowed.len(),
+            ErrorCode::Unauthorized
+        );
         let mut approved: u8 = 0;
         let mut seen: std::collections::BTreeSet<Pubkey> = std::collections::BTreeSet::new();
         if allowed.iter().any(|k| *k == authority.key()) {
@@ -27,12 +30,18 @@ pub fn handler(ctx: Context<ReleaseTimelocks>) -> Result<()> {
             let _ = seen.insert(authority.key());
         }
         for ai in ctx.remaining_accounts.iter() {
-            if !ai.is_signer { continue; }
-            if seen.contains(&ai.key()) { continue; }
+            if !ai.is_signer {
+                continue;
+            }
+            if seen.contains(&ai.key()) {
+                continue;
+            }
             if allowed.iter().any(|k| *k == ai.key()) {
                 approved = approved.saturating_add(1);
                 let _ = seen.insert(ai.key());
-                if approved >= threshold { break; }
+                if approved >= threshold {
+                    break;
+                }
             }
         }
         require!(approved >= threshold, ErrorCode::Unauthorized);
@@ -86,5 +95,3 @@ pub struct ReleaseTimelocks<'info> {
     )]
     pub vault: Account<'info, CollateralVault>,
 }
-
-

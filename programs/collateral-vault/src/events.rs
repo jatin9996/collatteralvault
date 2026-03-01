@@ -1,5 +1,5 @@
-use anchor_lang::prelude::*;
 use crate::types::TransactionType;
+use anchor_lang::prelude::*;
 
 #[event]
 pub struct DepositEvent {
@@ -123,7 +123,6 @@ pub struct VaultClosedEvent {
     pub owner: Pubkey,
 }
 
-
 #[event]
 pub struct YieldDepositEvent {
     pub vault: Pubkey,
@@ -191,5 +190,3 @@ pub struct WithdrawWhitelistUpdatedEvent {
     pub added: bool,
     pub new_len: u32,
 }
-
-

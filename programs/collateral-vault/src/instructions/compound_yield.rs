@@ -4,8 +4,8 @@ use crate::constants::VAULT_SEED;
 use crate::error::ErrorCode;
 use crate::events::YieldCompoundEvent;
 use crate::state::{CollateralVault, VaultAuthority};
+use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
 use anchor_lang::solana_program::program::invoke_signed;
-use anchor_lang::solana_program::instruction::{Instruction, AccountMeta};
 
 pub fn handler(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()> {
     // Authorization: single-owner or multisig
@@ -20,7 +20,10 @@ pub fn handler(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()
     } else {
         let allowed: &Vec<Pubkey> = &ctx.accounts.vault.multisig_signers;
         require!(!allowed.is_empty(), ErrorCode::Unauthorized);
-        require!((threshold as usize) <= allowed.len(), ErrorCode::Unauthorized);
+        require!(
+            (threshold as usize) <= allowed.len(),
+            ErrorCode::Unauthorized
+        );
         let mut approved: u8 = 0;
         let mut seen: std::collections::BTreeSet<Pubkey> = std::collections::BTreeSet::new();
         if allowed.iter().any(|k| *k == ctx.accounts.authority.key()) {
@@ -28,12 +31,18 @@ pub fn handler(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()
             let _ = seen.insert(ctx.accounts.authority.key());
         }
         for ai in ctx.remaining_accounts.iter() {
-            if !ai.is_signer { continue; }
-            if seen.contains(&ai.key()) { continue; }
+            if !ai.is_signer {
+                continue;
+            }
+            if seen.contains(&ai.key()) {
+                continue;
+            }
             if allowed.iter().any(|k| *k == ai.key()) {
                 approved = approved.saturating_add(1);
                 let _ = seen.insert(ai.key());
-                if approved >= threshold { break; }
+                if approved >= threshold {
+                    break;
+                }
             }
         }
         require!(approved >= threshold, ErrorCode::Unauthorized);
@@ -42,13 +51,20 @@ pub fn handler(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()
     // Whitelist check for yield program
     let yp = ctx.accounts.yield_program.key();
     require!(
-        ctx.accounts.vault_authority.yield_whitelist.iter().any(|p| *p == yp),
+        ctx.accounts
+            .vault_authority
+            .yield_whitelist
+            .iter()
+            .any(|p| *p == yp),
         ErrorCode::YieldProgramNotWhitelisted
     );
 
     let vault = &mut ctx.accounts.vault;
     if compounded_amount > 0 {
-        require!(vault.yield_accrued_balance >= compounded_amount, ErrorCode::InsufficientYieldBalance);
+        require!(
+            vault.yield_accrued_balance >= compounded_amount,
+            ErrorCode::InsufficientYieldBalance
+        );
         vault.yield_accrued_balance = vault
             .yield_accrued_balance
             .checked_sub(compounded_amount)
@@ -73,16 +89,28 @@ pub fn handler(ctx: Context<CompoundYield>, compounded_amount: u64) -> Result<()
     });
 
     // Optional CPI passthrough to claim/reinvest rewards
-    let signer_seeds: &[&[u8]] = &[crate::constants::VAULT_SEED, ctx.accounts.vault.owner.as_ref(), &[ctx.accounts.vault.bump]];
+    let signer_seeds: &[&[u8]] = &[
+        crate::constants::VAULT_SEED,
+        ctx.accounts.vault.owner.as_ref(),
+        &[ctx.accounts.vault.bump],
+    ];
     let signer: &[&[&[u8]]] = &[signer_seeds];
     let remaining = ctx.remaining_accounts;
     if !remaining.is_empty() {
         let metas: Vec<AccountMeta> = remaining
             .iter()
-            .map(|ai| AccountMeta { pubkey: ai.key(), is_signer: ai.is_signer || ai.key() == ctx.accounts.vault.key(), is_writable: ai.is_writable })
+            .map(|ai| AccountMeta {
+                pubkey: ai.key(),
+                is_signer: ai.is_signer || ai.key() == ctx.accounts.vault.key(),
+                is_writable: ai.is_writable,
+            })
             .collect();
         let program_id = ctx.accounts.yield_program.key();
-        let ix = Instruction { program_id, accounts: metas, data: vec![] };
+        let ix = Instruction {
+            program_id,
+            accounts: metas,
+            data: vec![],
+        };
         let _ = invoke_signed(&ix, remaining, signer);
     }
 
@@ -117,5 +145,3 @@ pub struct CompoundYield<'info> {
     /// CHECK: used for key only
     pub yield_program: UncheckedAccount<'info>,
 }
-
-

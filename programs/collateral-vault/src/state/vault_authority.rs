@@ -1,5 +1,5 @@
-use anchor_lang::prelude::*;
 use crate::constants::MAX_AUTHORIZED_PROGRAMS;
+use anchor_lang::prelude::*;
 
 #[account]
 #[derive(InitSpace)]
@@ -37,7 +37,5 @@ impl VaultAuthority {
         + 4                   // yield_whitelist vec len
         + (MAX_AUTHORIZED_PROGRAMS * 32)
         + 1                   // risk_level
-        + 64;                 // reserved
+        + 64; // reserved
 }
-
-

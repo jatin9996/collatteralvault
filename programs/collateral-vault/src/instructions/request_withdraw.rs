@@ -14,15 +14,15 @@ pub fn handler(ctx: Context<RequestWithdraw>, amount: u64) -> Result<()> {
     // Enforce min delay configured
     let delay = vault.min_withdraw_delay_seconds;
     require!(delay > 0, ErrorCode::Unauthorized);
-    let exec_at = now
-        .checked_add(delay)
-        .ok_or(ErrorCode::Overflow)?;
+    let exec_at = now.checked_add(delay).ok_or(ErrorCode::Overflow)?;
 
-    vault.pending_withdrawals.push(crate::types::PendingWithdrawalEntry {
-        amount,
-        requested_at: now,
-        executable_at: exec_at,
-    });
+    vault
+        .pending_withdrawals
+        .push(crate::types::PendingWithdrawalEntry {
+            amount,
+            requested_at: now,
+            executable_at: exec_at,
+        });
 
     emit!(WithdrawRequestedEvent {
         vault: vault.key(),
@@ -49,5 +49,3 @@ pub struct RequestWithdraw<'info> {
     )]
     pub vault: Account<'info, CollateralVault>,
 }
-
-

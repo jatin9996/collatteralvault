@@ -3,8 +3,8 @@ use anchor_lang::prelude::*;
 use crate::constants::VAULT_AUTHORITY_SEED;
 use crate::error::ErrorCode;
 use crate::events::{TransactionEvent, UnlockEvent};
-use crate::types::TransactionType;
 use crate::state::{CollateralVault, VaultAuthority};
+use crate::types::TransactionType;
 use anchor_lang::solana_program::sysvar::instructions as sysvar_instructions;
 
 pub fn handler(ctx: Context<UnlockCollateral>, amount: u64) -> Result<()> {
@@ -22,7 +22,11 @@ pub fn handler(ctx: Context<UnlockCollateral>, amount: u64) -> Result<()> {
     );
 
     if va.cpi_enforced {
-        require_keys_eq!(ctx.accounts.caller_program.key(), actual_caller, ErrorCode::UnauthorizedProgram);
+        require_keys_eq!(
+            ctx.accounts.caller_program.key(),
+            actual_caller,
+            ErrorCode::UnauthorizedProgram
+        );
     }
 
     let vault = &mut ctx.accounts.vault;
@@ -77,9 +81,9 @@ pub struct UnlockCollateral<'info> {
     )]
     pub vault_authority: Account<'info, VaultAuthority>,
 
-	/// CHECK: Instructions sysvar account for CPI-origin verification when enforced
-	#[account(address = anchor_lang::solana_program::sysvar::instructions::ID)]
-	pub instructions: AccountInfo<'info>,
+    /// CHECK: Instructions sysvar account for CPI-origin verification when enforced
+    #[account(address = anchor_lang::solana_program::sysvar::instructions::ID)]
+    pub instructions: AccountInfo<'info>,
 
     #[account(mut)]
     pub vault: Account<'info, CollateralVault>,
@@ -88,8 +92,9 @@ pub struct UnlockCollateral<'info> {
 fn resolve_caller_program(instructions: &AccountInfo<'_>) -> Result<Pubkey> {
     let current_index = sysvar_instructions::load_current_index_checked(instructions)?;
     require!(current_index > 0, ErrorCode::UnauthorizedProgram);
-    let caller_ix = sysvar_instructions::load_instruction_at_checked((current_index - 1) as usize, instructions)?;
+    let caller_ix = sysvar_instructions::load_instruction_at_checked(
+        (current_index - 1) as usize,
+        instructions,
+    )?;
     Ok(caller_ix.program_id)
 }
-
-
