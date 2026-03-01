@@ -1,0 +1,38 @@
+# Anchor
+.anchor
+target/
+docker-target/
+test-ledger/
+
+# Dependencies
+node_modules/
+.yarn/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+**/*.rs.bk
+*.so
+*.dylib
+*.dll
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp

@@ -1,0 +1,17 @@
+// PDA seeds
+pub const VAULT_SEED: &[u8] = b"vault";
+pub const VAULT_AUTHORITY_SEED: &[u8] = b"vault_authority";
+pub const POSITION_SUMMARY_SEED: &[u8] = b"position-summary";
+
+// Sizing limits
+pub const MAX_AUTHORIZED_PROGRAMS: usize = 64; // conservative upper bound for admin list
+pub const MAX_MULTISIG_SIGNERS: usize = 10; // upper bound for per-vault multisig signers
+pub const MAX_DELEGATES: usize = 16; // per-vault user delegates allowed to act on owner's behalf
+pub const MAX_TIMELOCKS: usize = 64; // max concurrent scheduled timelocks per vault
+pub const MAX_PENDING_WITHDRAWALS: usize = 64; // max pending withdrawal requests per vault
+pub const MAX_WITHDRAW_WHITELIST: usize = 32; // max whitelisted recipient addresses per vault
+
+// Business rules
+// Minimum deposit amount in smallest units (token decimals apply).
+// Set to 1 to effectively mirror > 0, can be raised by code updates if required.
+pub const MIN_DEPOSIT: u64 = 1;
